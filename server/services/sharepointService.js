@@ -339,16 +339,35 @@ async function diagnose() {
         const altDrives = altDrivesRes.value || [];
         result.steps.subsiteDrives = altDrives.map((d) => ({ id: d.id, name: d.name }));
 
-        // Search the file in each drive of the subsite
-        const encFile = encodePath(fileInSite);
+        // Search the file in each drive of the subsite, trying multiple path depths.
+        // e.g. /Catalogos/01_GRANEL/... OR /01_GRANEL/... (when drive IS "Catalogos")
+        const pathVariants = [];
+        for (let i = 1; i < segments.length; i++) {
+          pathVariants.push('/' + segments.slice(i).join('/'));
+        }
         result.steps.subsiteFileSearch = {};
         for (const d of altDrives) {
-          try {
-            const f = await graphGet(`/sites/${altSiteId}/drives/${d.id}/root:${encFile}`);
-            result.steps.subsiteFileSearch[d.name] = `FOUND - ${f.name} | DRIVE_ID=${d.id} | SITE_ID=${altSiteId}`;
-          } catch (e3) {
-            result.steps.subsiteFileSearch[d.name] = `not found`;
+          let found = false;
+          for (const variant of pathVariants) {
+            try {
+              const f = await graphGet(`/sites/${altSiteId}/drives/${d.id}/root:${encodePath(variant)}`);
+              result.steps.subsiteFileSearch[d.name] = `FOUND at ${variant} | DRIVE_ID=${d.id} | SITE_ID=${altSiteId}`;
+              found = true;
+              break;
+            } catch (_) { /* try next variant */ }
           }
+          if (!found) result.steps.subsiteFileSearch[d.name] = 'not found';
+        }
+
+        // List root folders of the "Catálogos" drive to aid manual diagnosis
+        const catalogsDrive = altDrives.find((d) =>
+          d.name.toLowerCase().replace(/[áa]/g, 'a') === 'catalogos'
+        );
+        if (catalogsDrive) {
+          try {
+            const rootItems = await graphGet(`/sites/${altSiteId}/drives/${catalogsDrive.id}/root/children`);
+            result.steps.catalogsRootFolders = (rootItems.value || []).map((i) => i.name);
+          } catch (_) { /* ignore */ }
         }
       } catch (e2) {
         result.steps.subsiteFound = `No subsite at /${sitePath}: ${e2.message}`;
