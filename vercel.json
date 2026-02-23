@@ -1,11 +1,14 @@
 {
   "version": 2,
-  "buildCommand": "npm run vercel-build",
-  "functions": {
-    "server/index.js": {
-      "includeFiles": "client/dist/**"
+  "builds": [
+    {
+      "src": "server/index.js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["client/dist/**"]
+      }
     }
-  },
+  ],
   "routes": [
     { "src": "/(.*)", "dest": "server/index.js" }
   ]
