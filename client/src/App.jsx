@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import Header from './components/Header.jsx';
 import FilterBar from './components/FilterBar.jsx';
-import ReferenciaCard from './components/ReferenciaCard.jsx';
+import Dashboard from './components/Dashboard.jsx';
+import TablaReferencias from './components/TablaReferencias.jsx';
 import DetalleModal from './components/DetalleModal.jsx';
 import SolicitudModal from './components/SolicitudModal.jsx';
 import useReferencias from './hooks/useReferencias.js';
@@ -33,7 +34,7 @@ export default function App() {
     return { comerciales, tipos, categorias, estados };
   }, [referencias]);
 
-  // Filtered data
+  // Filtered data for the table
   const filtered = useMemo(() => {
     return referencias.filter((r) => {
       if (filters.comercial && r.nombreComercial !== filters.comercial) return false;
@@ -67,6 +68,11 @@ export default function App() {
       <Header onSolicitar={() => setSolicitudOpen(true)} />
 
       <main className="main">
+        {/* Dashboard: KPI cards + pie charts — always shows totals over all data */}
+        {!loading && !error && referencias.length > 0 && (
+          <Dashboard referencias={referencias} />
+        )}
+
         <FilterBar
           filters={filters}
           setFilters={setFilters}
@@ -90,15 +96,10 @@ export default function App() {
           <EmptyState hasFilters={activeFilterCount > 0} onClear={clearFilters} />
         )}
         {!loading && !error && filtered.length > 0 && (
-          <div className="grid">
-            {filtered.map((ref, idx) => (
-              <ReferenciaCard
-                key={ref._sheetRow ?? idx}
-                referencia={ref}
-                onVerDetalles={() => setDetalleReferencia(ref)}
-              />
-            ))}
-          </div>
+          <TablaReferencias
+            referencias={filtered}
+            onVerDetalles={setDetalleReferencia}
+          />
         )}
       </main>
 
@@ -125,7 +126,6 @@ export default function App() {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function parseDate(str) {
   if (!str) return null;
-  // Accepts DD/MM/YYYY or YYYY-MM-DD
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
     const [d, m, y] = str.split('/');
     return new Date(`${y}-${m}-${d}`);
