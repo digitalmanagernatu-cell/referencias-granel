@@ -1,5 +1,6 @@
 const { ConfidentialClientApplication } = require('@azure/msal-node');
 const axios = require('axios');
+const XLSX = require('xlsx');
 
 const TENANT_ID = process.env.TENANT_ID;
 const CLIENT_ID = process.env.CLIENT_ID;
@@ -7,33 +8,30 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const SITE_ID = process.env.SITE_ID;
 const FILE_ID = process.env.FILE_ID;
 const FILE_PATH = process.env.FILE_PATH;
-const DRIVE_ID = process.env.DRIVE_ID; // optional: specific document library drive ID
-const SHAREPOINT_HOST = process.env.SHAREPOINT_HOST; // e.g. natuaromatic.sharepoint.com
+const DRIVE_ID = process.env.DRIVE_ID;
+const SHAREPOINT_HOST = process.env.SHAREPOINT_HOST;
 
 // Row index (1-based) where 2026 data starts in the Excel sheet.
-// Row 56 in the spreadsheet corresponds to index 55 (0-based), but the
-// Graph API /values range uses row numbers directly so we address it as
-// a named range below.
 const DATA_START_ROW = 56;
 
-// Excel column mapping (1-based index → field name)
+// Excel column mapping (0-based index → field name)
 const COLUMNS = [
-  'numero',              // A - Nº
-  'nombreComercial',     // B - NOMBRE DEL COMERCIAL
-  'tipoProducto',        // C - TIPO PRODUCTO
-  'categoria',           // D - CATEGORIA
-  'nombreProducto',      // E - NOMBRE DEL PRODUCTO
-  'nRefAsignado',        // F - Nº REF ASIGNADO
-  'nombreCliente',       // G - NOMBRE CLIENTE
-  'peticionFechaLanzamiento', // H - PETICIÓN FECHA LANZAMIENTO
-  'fechaSolicitudComercial',  // I - FECHA SOLICITUD COMERCIAL
-  'proveedor',           // J - PROVEEDOR
-  'fechaSolicitudProveedor',  // K - FECHA DE SOLICITUD AL PROVEEDOR
-  'fechaLlegadaPropuesta',    // L - FECHA LLEGADA PROPUESTA
-  'estado',              // M - ESTADO
-  'fechaValidacionNatu', // N - FECHA DE VALIDACION NATU
-  'muestrasLaboratorio', // O - MUESTRAS LABORATORIO
-  'enlaces',             // P - ENLACES
+  'numero',              // A
+  'nombreComercial',     // B
+  'tipoProducto',        // C
+  'categoria',           // D
+  'nombreProducto',      // E
+  'nRefAsignado',        // F
+  'nombreCliente',       // G
+  'peticionFechaLanzamiento', // H
+  'fechaSolicitudComercial',  // I
+  'proveedor',           // J
+  'fechaSolicitudProveedor',  // K
+  'fechaLlegadaPropuesta',    // L
+  'estado',              // M
+  'fechaValidacionNatu', // N
+  'muestrasLaboratorio', // O
+  'enlaces',             // P
 ];
 
 // ─── MSAL client ───────────────────────────────────────────────────────────
@@ -87,56 +85,24 @@ function handleAxiosError(err) {
   throw err;
 }
 
-async function graphGet(path, extraHeaders = {}) {
+async function graphGet(path) {
   const token = await getAccessToken();
   try {
     const response = await axios.get(graphUrl(path), {
-      headers: { Authorization: `Bearer ${token}`, ...extraHeaders },
+      headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;
   } catch (err) { handleAxiosError(err); }
 }
 
-async function graphPost(path, body, extraHeaders = {}) {
-  const token = await getAccessToken();
-  try {
-    const response = await axios.post(graphUrl(path), body, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...extraHeaders,
-      },
-    });
-    return response.data;
-  } catch (err) { handleAxiosError(err); }
-}
-
-async function graphPatch(path, body, extraHeaders = {}) {
-  const token = await getAccessToken();
-  try {
-    const response = await axios.patch(graphUrl(path), body, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...extraHeaders,
-      },
-    });
-    return response.data;
-  } catch (err) { handleAxiosError(err); }
-}
-
-// ─── Worksheet helpers ─────────────────────────────────────────────────────
-// Encode a file path preserving slashes but encoding each segment
+// ─── File path helpers ─────────────────────────────────────────────────────
 function encodePath(p) {
   return p.split('/').map(encodeURIComponent).join('/');
 }
 
-// Build the drive base prefix: either by DRIVE_ID, default drive, or item ID
 function getDriveBase() {
   if (FILE_ID) return `/sites/${SITE_ID}/drive/items/${FILE_ID}`;
   if (DRIVE_ID) {
-    // When DRIVE_ID is set, FILE_PATH must be the path *inside* that drive.
-    // e.g. /01_GRANEL/02_ GRANEL ITALIA/.../NUEVOS DESARROLLOS GRANEL.xlsx
     const encoded = encodePath(FILE_PATH);
     return `/sites/${SITE_ID}/drives/${DRIVE_ID}/root:${encoded}`;
   }
@@ -147,90 +113,63 @@ function getDriveBase() {
   throw new Error('Falta variable de entorno: FILE_ID, DRIVE_ID+FILE_PATH, o FILE_PATH');
 }
 
-function getWorksheetBase() {
-  if (FILE_ID) {
-    return `${getDriveBase()}/workbook/worksheets('NUEVAS REFERENCIAS')`;
-  }
-  return `${getDriveBase()}:/workbook/worksheets('NUEVAS REFERENCIAS')`;
+// Returns the Graph API path for downloading/uploading the raw file binary.
+function getFileContentPath() {
+  if (FILE_ID) return `/sites/${SITE_ID}/drive/items/${FILE_ID}/content`;
+  if (DRIVE_ID) return `/sites/${SITE_ID}/drives/${DRIVE_ID}/root:${encodePath(FILE_PATH)}:/content`;
+  if (FILE_PATH) return `/sites/${SITE_ID}/drive/root:${encodePath(FILE_PATH)}:/content`;
+  throw new Error('Falta variable de entorno: FILE_ID, DRIVE_ID+FILE_PATH, o FILE_PATH');
 }
 
-// Returns the workbook base path (used for session management)
-function getWorkbookBase() {
-  if (FILE_ID) return `${getDriveBase()}/workbook`;
-  return `${getDriveBase()}:/workbook`;
-}
-
-// Creates a Graph API workbook session (required for app-only auth with WAC).
-// Returns sessionId or null if creation fails (falls back to sessionless).
-async function createWorkbookSession(persistChanges) {
+// ─── Download / Upload ─────────────────────────────────────────────────────
+async function downloadExcel() {
+  const token = await getAccessToken();
   try {
-    const session = await graphPost(`${getWorkbookBase()}/createSession`, { persistChanges });
-    return session.id;
-  } catch (e) {
-    console.warn('createWorkbookSession failed, proceeding without session:', e.message);
-    return null;
-  }
+    const response = await axios.get(graphUrl(getFileContentPath()), {
+      headers: { Authorization: `Bearer ${token}` },
+      responseType: 'arraybuffer',
+      maxRedirects: 5,
+    });
+    return Buffer.from(response.data);
+  } catch (err) { handleAxiosError(err); }
 }
 
-async function closeWorkbookSession(sessionId) {
-  if (!sessionId) return;
+async function uploadExcel(buffer) {
+  const token = await getAccessToken();
   try {
-    await graphPost(`${getWorkbookBase()}/closeSession`, {}, { 'workbook-session-id': sessionId });
-  } catch (_) { /* best-effort */ }
+    await axios.put(graphUrl(getFileContentPath()), buffer, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      },
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    });
+  } catch (err) { handleAxiosError(err); }
 }
 
-/**
- * Fetch all used rows from DATA_START_ROW onwards.
- * We request the usedRange of the sheet and slice from the start row.
- */
-async function fetchAllRows() {
-  const sessionId = await createWorkbookSession(false);
-  const h = sessionId ? { 'workbook-session-id': sessionId } : {};
-  try {
-    const data = await graphGet(`${getWorksheetBase()}/usedRange`, h);
-    const allValues = data.values; // 2D array, row-major
+// ─── XLSX parsing ──────────────────────────────────────────────────────────
+const SHEET_NAME = 'NUEVAS REFERENCIAS';
 
-    if (!allValues || allValues.length < DATA_START_ROW) {
-      return [];
-    }
-
-    // Slice from DATA_START_ROW - 1 (0-based) to end
-    const dataRows = allValues.slice(DATA_START_ROW - 1);
-
-    return dataRows
-      .map((row, idx) => rowToObject(row, DATA_START_ROW + idx))
-      .filter((r) => !isRowEmpty(r));
-  } finally {
-    await closeWorkbookSession(sessionId);
+function parseSheet(buffer) {
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false });
+  const sheet = workbook.Sheets[SHEET_NAME];
+  if (!sheet) {
+    const names = workbook.SheetNames.join(', ');
+    throw new Error(
+      `Hoja "${SHEET_NAME}" no encontrada. Hojas disponibles: ${names}`
+    );
   }
+  // header: 1 → returns 2D array; raw: false → formatted strings (like what Excel shows)
+  const allValues = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    raw: false,
+    defval: '',
+  });
+  return { workbook, sheet, allValues };
 }
 
-/**
- * Find the next empty row after the data (1-based row number in the sheet).
- */
-async function findNextEmptyRow(sessionId) {
-  const h = sessionId ? { 'workbook-session-id': sessionId } : {};
-  const data = await graphGet(`${getWorksheetBase()}/usedRange`, h);
-  const allValues = data.values || [];
-  // Next row = total rows used + 1  (1-based)
-  return allValues.length + 1;
-}
-
-/**
- * Write a single row of values at the given 1-based sheet row.
- * Addresses the range A{row}:P{row}
- */
-async function writeRow(rowNumber, values, sessionId) {
-  const range = `A${rowNumber}:P${rowNumber}`;
-  const h = sessionId ? { 'workbook-session-id': sessionId } : {};
-  await graphPatch(
-    `${getWorksheetBase()}/range(address='${encodeURIComponent(range)}')`,
-    { values: [values] },
-    h
-  );
-}
-
-// ─── Conversion helpers ─────────────────────────────────────────────────────
+// ─── Conversion helpers ────────────────────────────────────────────────────
 function rowToObject(row, sheetRowNumber) {
   const obj = { _sheetRow: sheetRowNumber };
   COLUMNS.forEach((col, i) => {
@@ -251,30 +190,52 @@ function objectToRow(obj) {
 
 /**
  * GET all referencias from the Excel (rows >= DATA_START_ROW, non-empty).
+ * Downloads the file binary and parses it locally — no WAC required.
  */
 async function getReferencias() {
-  return fetchAllRows();
+  const buffer = await downloadExcel();
+  const { allValues } = parseSheet(buffer);
+
+  if (allValues.length < DATA_START_ROW) return [];
+
+  const dataRows = allValues.slice(DATA_START_ROW - 1);
+  return dataRows
+    .map((row, idx) => rowToObject(row, DATA_START_ROW + idx))
+    .filter((r) => !isRowEmpty(r));
 }
 
 /**
  * POST a new referencia row to the Excel.
+ * Downloads, appends the row, re-uploads — no WAC required.
  * @param {Object} data - fields matching the COLUMNS mapping
  */
 async function addReferencia(data) {
-  const sessionId = await createWorkbookSession(true); // persistChanges: true for writes
-  try {
-    const nextRow = await findNextEmptyRow(sessionId);
-    const rowValues = objectToRow(data);
-    await writeRow(nextRow, rowValues, sessionId);
-    return { sheetRow: nextRow, ...data };
-  } finally {
-    await closeWorkbookSession(sessionId);
-  }
+  const buffer = await downloadExcel();
+  const { workbook, sheet, allValues } = parseSheet(buffer);
+
+  // Next empty row: 0-based index = current total used rows
+  const nextRowIdx = allValues.length;
+  const rowValues = objectToRow(data);
+
+  COLUMNS.forEach((_col, colIdx) => {
+    const cellRef = XLSX.utils.encode_cell({ r: nextRowIdx, c: colIdx });
+    sheet[cellRef] = { v: rowValues[colIdx], t: 's' };
+  });
+
+  // Expand the sheet's declared range to include the new row
+  const ref = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
+  ref.e.r = Math.max(ref.e.r, nextRowIdx);
+  ref.e.c = Math.max(ref.e.c, COLUMNS.length - 1);
+  sheet['!ref'] = XLSX.utils.encode_range(ref);
+
+  const newBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  await uploadExcel(newBuffer);
+
+  return { sheetRow: nextRowIdx + 1, ...data }; // 1-based row number
 }
 
 /**
- * Step-by-step diagnostic: tests token, site, file, and worksheets.
- * Returns an object with results for each step.
+ * Step-by-step diagnostic: tests token, site, drives, file access, and download.
  */
 async function diagnose() {
   const result = {
@@ -285,16 +246,16 @@ async function diagnose() {
       SITE_ID: SITE_ID || '✗ missing',
       FILE_ID: FILE_ID || '(not set)',
       FILE_PATH: FILE_PATH || '(not set)',
+      DRIVE_ID: DRIVE_ID || '(not set)',
     },
-    constructedBase: null,
+    constructedContentPath: null,
     steps: {},
   };
 
-  // Show constructed URL
   try {
-    result.constructedBase = getWorksheetBase();
+    result.constructedContentPath = getFileContentPath();
   } catch (e) {
-    result.constructedBase = `ERROR: ${e.message}`;
+    result.constructedContentPath = `ERROR: ${e.message}`;
   }
 
   // Step 1: token
@@ -315,7 +276,7 @@ async function diagnose() {
     return result;
   }
 
-  // Step 3: list all drives in the site (to find the right library)
+  // Step 3: list all drives in the site
   try {
     const drivesRes = await graphGet(`/sites/${SITE_ID}/drives`);
     result.steps.drives = (drivesRes.value || []).map((d) => ({
@@ -327,18 +288,16 @@ async function diagnose() {
     result.steps.drives = `FAIL: ${e.message}`;
   }
 
-  // Step 4: try file access with current config
-  const filePathUrl = FILE_ID
+  // Step 4: file metadata access
+  const fileMetaUrl = FILE_ID
     ? `/sites/${SITE_ID}/drive/items/${FILE_ID}`
     : getDriveBase();
-  const fileAccessUrl = FILE_ID ? filePathUrl : filePathUrl;
   try {
-    const file = await graphGet(fileAccessUrl);
+    const file = await graphGet(fileMetaUrl);
     result.steps.file = `OK - ${file.name || file.id}`;
   } catch (e) {
     result.steps.file = `FAIL: ${e.message}`;
 
-    // Also try each drive with FILE_PATH (minus first segment) to find it
     if (Array.isArray(result.steps.drives) && FILE_PATH) {
       const parts = FILE_PATH.replace(/^\//, '').split('/');
       const pathInsideLib = parts.length > 1 ? '/' + parts.slice(1).join('/') : FILE_PATH;
@@ -354,13 +313,9 @@ async function diagnose() {
       }
     }
 
-    // Try to find the site using SHAREPOINT_HOST + first path segment
-    // e.g. FILE_PATH=/mkt/Catalogos/... → look for site at /mkt
     if (SHAREPOINT_HOST && FILE_PATH) {
       const segments = FILE_PATH.replace(/^\//, '').split('/');
-      const sitePath = segments[0]; // 'mkt'
-      const fileInSite = '/' + segments.slice(1).join('/'); // '/Catalogos/...'
-
+      const sitePath = segments[0];
       try {
         const altSite = await graphGet(`/sites/${SHAREPOINT_HOST}:/${sitePath}`);
         const altSiteId = altSite.id;
@@ -369,14 +324,10 @@ async function diagnose() {
           name: altSite.displayName || altSite.name,
           hint: `→ Update SITE_ID to: ${altSiteId}`,
         };
-
-        // List drives in that subsite
         const altDrivesRes = await graphGet(`/sites/${altSiteId}/drives`);
         const altDrives = altDrivesRes.value || [];
         result.steps.subsiteDrives = altDrives.map((d) => ({ id: d.id, name: d.name }));
 
-        // Search the file in each drive of the subsite, trying multiple path depths.
-        // e.g. /Catalogos/01_GRANEL/... OR /01_GRANEL/... (when drive IS "Catalogos")
         const pathVariants = [];
         for (let i = 1; i < segments.length; i++) {
           pathVariants.push('/' + segments.slice(i).join('/'));
@@ -394,17 +345,6 @@ async function diagnose() {
           }
           if (!found) result.steps.subsiteFileSearch[d.name] = 'not found';
         }
-
-        // List root folders of the "Catálogos" drive to aid manual diagnosis
-        const catalogsDrive = altDrives.find((d) =>
-          d.name.toLowerCase().replace(/[áa]/g, 'a') === 'catalogos'
-        );
-        if (catalogsDrive) {
-          try {
-            const rootItems = await graphGet(`/sites/${altSiteId}/drives/${catalogsDrive.id}/root/children`);
-            result.steps.catalogsRootFolders = (rootItems.value || []).map((i) => i.name);
-          } catch (_) { /* ignore */ }
-        }
       } catch (e2) {
         result.steps.subsiteFound = `No subsite at /${sitePath}: ${e2.message}`;
       }
@@ -413,18 +353,14 @@ async function diagnose() {
     return result;
   }
 
-  // Step 5: list worksheets
-  const wbBase = FILE_ID
-    ? `/sites/${SITE_ID}/drive/items/${FILE_ID}`
-    : getDriveBase();
-  const wbPath = FILE_ID
-    ? `${wbBase}/workbook/worksheets`
-    : `${wbBase}:/workbook/worksheets`;
+  // Step 5: download the file binary and parse sheet names
   try {
-    const wb = await graphGet(wbPath);
-    result.steps.worksheets = (wb.value || []).map((w) => w.name);
+    const buf = await downloadExcel();
+    const workbook = XLSX.read(buf, { type: 'buffer' });
+    result.steps.download = `OK - ${buf.length} bytes`;
+    result.steps.sheetNames = workbook.SheetNames;
   } catch (e) {
-    result.steps.worksheets = `FAIL: ${e.message}`;
+    result.steps.download = `FAIL: ${e.message}`;
   }
 
   return result;
