@@ -7,6 +7,7 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const SITE_ID = process.env.SITE_ID;
 const FILE_ID = process.env.FILE_ID;
 const FILE_PATH = process.env.FILE_PATH;
+const DRIVE_ID = process.env.DRIVE_ID; // optional: specific document library drive ID
 
 // Row index (1-based) where 2026 data starts in the Excel sheet.
 // Row 56 in the spreadsheet corresponds to index 55 (0-based), but the
@@ -122,17 +123,36 @@ async function graphPatch(path, body) {
 }
 
 // ─── Worksheet helpers ─────────────────────────────────────────────────────
-// Support both FILE_ID (drive item ID) and FILE_PATH (relative path in SharePoint)
-function getWorksheetBase() {
-  if (FILE_ID) {
-    return `/sites/${SITE_ID}/drive/items/${FILE_ID}/workbook/worksheets('NUEVAS REFERENCIAS')`;
+// Encode a file path preserving slashes but encoding each segment
+function encodePath(p) {
+  return p.split('/').map(encodeURIComponent).join('/');
+}
+
+// Build the drive base prefix: either by DRIVE_ID, default drive, or item ID
+function getDriveBase() {
+  if (FILE_ID) return `/sites/${SITE_ID}/drive/items/${FILE_ID}`;
+  if (DRIVE_ID) {
+    // FILE_PATH may start with the library name as first segment - strip it
+    // e.g. /mkt/Catalogos/... with DRIVE_ID pointing to "mkt" library
+    // The path inside the drive starts after the library name
+    const parts = FILE_PATH.replace(/^\//, '').split('/');
+    // If first segment matches the library, skip it; otherwise use full path
+    const drivePath = parts.length > 1 ? '/' + parts.slice(1).join('/') : FILE_PATH;
+    const encoded = encodePath(drivePath);
+    return `/sites/${SITE_ID}/drives/${DRIVE_ID}/root:${encoded}`;
   }
   if (FILE_PATH) {
-    // Graph API path-based access: /sites/{id}/drive/root:/{path}:/workbook/...
-    const encodedPath = FILE_PATH.split('/').map(encodeURIComponent).join('/');
-    return `/sites/${SITE_ID}/drive/root:${encodedPath}:/workbook/worksheets('NUEVAS REFERENCIAS')`;
+    const encoded = encodePath(FILE_PATH);
+    return `/sites/${SITE_ID}/drive/root:${encoded}`;
   }
-  throw new Error('Falta variable de entorno: FILE_ID o FILE_PATH');
+  throw new Error('Falta variable de entorno: FILE_ID, DRIVE_ID+FILE_PATH, o FILE_PATH');
+}
+
+function getWorksheetBase() {
+  if (FILE_ID) {
+    return `${getDriveBase()}/workbook/worksheets('NUEVAS REFERENCIAS')`;
+  }
+  return `${getDriveBase()}:/workbook/worksheets('NUEVAS REFERENCIAS')`;
 }
 
 /**
@@ -258,28 +278,54 @@ async function diagnose() {
     return result;
   }
 
-  // Step 3: file access
-  const filePath = FILE_ID
-    ? `/sites/${SITE_ID}/drive/items/${FILE_ID}`
-    : (() => {
-        const enc = FILE_PATH.split('/').map(encodeURIComponent).join('/');
-        return `/sites/${SITE_ID}/drive/root:${enc}`;
-      })();
+  // Step 3: list all drives in the site (to find the right library)
   try {
-    const file = await graphGet(filePath);
+    const drivesRes = await graphGet(`/sites/${SITE_ID}/drives`);
+    result.steps.drives = (drivesRes.value || []).map((d) => ({
+      id: d.id,
+      name: d.name,
+      driveType: d.driveType,
+    }));
+  } catch (e) {
+    result.steps.drives = `FAIL: ${e.message}`;
+  }
+
+  // Step 4: try file access with current config
+  const filePathUrl = FILE_ID
+    ? `/sites/${SITE_ID}/drive/items/${FILE_ID}`
+    : getDriveBase();
+  const fileAccessUrl = FILE_ID ? filePathUrl : filePathUrl;
+  try {
+    const file = await graphGet(fileAccessUrl);
     result.steps.file = `OK - ${file.name || file.id}`;
   } catch (e) {
     result.steps.file = `FAIL: ${e.message}`;
+
+    // Also try each drive with FILE_PATH (minus first segment) to find it
+    if (Array.isArray(result.steps.drives) && FILE_PATH) {
+      const parts = FILE_PATH.replace(/^\//, '').split('/');
+      const pathInsideLib = parts.length > 1 ? '/' + parts.slice(1).join('/') : FILE_PATH;
+      const enc = encodePath(pathInsideLib);
+      result.steps.driveSearch = {};
+      for (const d of result.steps.drives) {
+        try {
+          const f = await graphGet(`/sites/${SITE_ID}/drives/${d.id}/root:${enc}`);
+          result.steps.driveSearch[d.name] = `FOUND - ${f.name} (driveId: ${d.id})`;
+        } catch (e2) {
+          result.steps.driveSearch[d.name] = `not found (${e2.message.split(' - ')[0]})`;
+        }
+      }
+    }
     return result;
   }
 
-  // Step 4: list worksheets
+  // Step 5: list worksheets
+  const wbBase = FILE_ID
+    ? `/sites/${SITE_ID}/drive/items/${FILE_ID}`
+    : getDriveBase();
   const wbPath = FILE_ID
-    ? `/sites/${SITE_ID}/drive/items/${FILE_ID}/workbook/worksheets`
-    : (() => {
-        const enc = FILE_PATH.split('/').map(encodeURIComponent).join('/');
-        return `/sites/${SITE_ID}/drive/root:${enc}:/workbook/worksheets`;
-      })();
+    ? `${wbBase}/workbook/worksheets`
+    : `${wbBase}:/workbook/worksheets`;
   try {
     const wb = await graphGet(wbPath);
     result.steps.worksheets = (wb.value || []).map((w) => w.name);
