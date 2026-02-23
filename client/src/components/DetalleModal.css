@@ -1,0 +1,69 @@
+.modal-detalle {
+  max-width: 600px;
+}
+
+.modal-header-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-header-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Detail grid */
+.detalle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.detalle-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.detalle-field-full {
+  grid-column: 1 / -1;
+}
+
+.detalle-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.detalle-value {
+  font-size: 14px;
+  color: var(--color-text-primary);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.detalle-link {
+  font-size: 13px;
+  color: var(--color-accent-light);
+  text-decoration: underline;
+  word-break: break-all;
+  transition: var(--transition);
+}
+.detalle-link:hover { color: var(--color-accent); }
+
+.detalle-empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  padding: 24px;
+}
+
+@media (max-width: 520px) {
+  .detalle-grid { grid-template-columns: 1fr; }
+}
