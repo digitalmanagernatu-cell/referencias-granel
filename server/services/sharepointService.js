@@ -87,36 +87,38 @@ function handleAxiosError(err) {
   throw err;
 }
 
-async function graphGet(path) {
+async function graphGet(path, extraHeaders = {}) {
   const token = await getAccessToken();
   try {
     const response = await axios.get(graphUrl(path), {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}`, ...extraHeaders },
     });
     return response.data;
   } catch (err) { handleAxiosError(err); }
 }
 
-async function graphPost(path, body) {
+async function graphPost(path, body, extraHeaders = {}) {
   const token = await getAccessToken();
   try {
     const response = await axios.post(graphUrl(path), body, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        ...extraHeaders,
       },
     });
     return response.data;
   } catch (err) { handleAxiosError(err); }
 }
 
-async function graphPatch(path, body) {
+async function graphPatch(path, body, extraHeaders = {}) {
   const token = await getAccessToken();
   try {
     const response = await axios.patch(graphUrl(path), body, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        ...extraHeaders,
       },
     });
     return response.data;
@@ -152,32 +154,63 @@ function getWorksheetBase() {
   return `${getDriveBase()}:/workbook/worksheets('NUEVAS REFERENCIAS')`;
 }
 
+// Returns the workbook base path (used for session management)
+function getWorkbookBase() {
+  if (FILE_ID) return `${getDriveBase()}/workbook`;
+  return `${getDriveBase()}:/workbook`;
+}
+
+// Creates a Graph API workbook session (required for app-only auth with WAC).
+// Returns sessionId or null if creation fails (falls back to sessionless).
+async function createWorkbookSession(persistChanges) {
+  try {
+    const session = await graphPost(`${getWorkbookBase()}/createSession`, { persistChanges });
+    return session.id;
+  } catch (e) {
+    console.warn('createWorkbookSession failed, proceeding without session:', e.message);
+    return null;
+  }
+}
+
+async function closeWorkbookSession(sessionId) {
+  if (!sessionId) return;
+  try {
+    await graphPost(`${getWorkbookBase()}/closeSession`, {}, { 'workbook-session-id': sessionId });
+  } catch (_) { /* best-effort */ }
+}
+
 /**
  * Fetch all used rows from DATA_START_ROW onwards.
  * We request the usedRange of the sheet and slice from the start row.
  */
 async function fetchAllRows() {
-  // Get used range of the entire worksheet
-  const data = await graphGet(`${getWorksheetBase()}/usedRange`);
-  const allValues = data.values; // 2D array, row-major
+  const sessionId = await createWorkbookSession(false);
+  const h = sessionId ? { 'workbook-session-id': sessionId } : {};
+  try {
+    const data = await graphGet(`${getWorksheetBase()}/usedRange`, h);
+    const allValues = data.values; // 2D array, row-major
 
-  if (!allValues || allValues.length < DATA_START_ROW) {
-    return [];
+    if (!allValues || allValues.length < DATA_START_ROW) {
+      return [];
+    }
+
+    // Slice from DATA_START_ROW - 1 (0-based) to end
+    const dataRows = allValues.slice(DATA_START_ROW - 1);
+
+    return dataRows
+      .map((row, idx) => rowToObject(row, DATA_START_ROW + idx))
+      .filter((r) => !isRowEmpty(r));
+  } finally {
+    await closeWorkbookSession(sessionId);
   }
-
-  // Slice from DATA_START_ROW - 1 (0-based) to end
-  const dataRows = allValues.slice(DATA_START_ROW - 1);
-
-  return dataRows
-    .map((row, idx) => rowToObject(row, DATA_START_ROW + idx))
-    .filter((r) => !isRowEmpty(r));
 }
 
 /**
  * Find the next empty row after the data (1-based row number in the sheet).
  */
-async function findNextEmptyRow() {
-  const data = await graphGet(`${getWorksheetBase()}/usedRange`);
+async function findNextEmptyRow(sessionId) {
+  const h = sessionId ? { 'workbook-session-id': sessionId } : {};
+  const data = await graphGet(`${getWorksheetBase()}/usedRange`, h);
   const allValues = data.values || [];
   // Next row = total rows used + 1  (1-based)
   return allValues.length + 1;
@@ -187,11 +220,13 @@ async function findNextEmptyRow() {
  * Write a single row of values at the given 1-based sheet row.
  * Addresses the range A{row}:P{row}
  */
-async function writeRow(rowNumber, values) {
+async function writeRow(rowNumber, values, sessionId) {
   const range = `A${rowNumber}:P${rowNumber}`;
+  const h = sessionId ? { 'workbook-session-id': sessionId } : {};
   await graphPatch(
     `${getWorksheetBase()}/range(address='${encodeURIComponent(range)}')`,
-    { values: [values] }
+    { values: [values] },
+    h
   );
 }
 
@@ -226,10 +261,15 @@ async function getReferencias() {
  * @param {Object} data - fields matching the COLUMNS mapping
  */
 async function addReferencia(data) {
-  const nextRow = await findNextEmptyRow();
-  const rowValues = objectToRow(data);
-  await writeRow(nextRow, rowValues);
-  return { sheetRow: nextRow, ...data };
+  const sessionId = await createWorkbookSession(true); // persistChanges: true for writes
+  try {
+    const nextRow = await findNextEmptyRow(sessionId);
+    const rowValues = objectToRow(data);
+    await writeRow(nextRow, rowValues, sessionId);
+    return { sheetRow: nextRow, ...data };
+  } finally {
+    await closeWorkbookSession(sessionId);
+  }
 }
 
 /**
