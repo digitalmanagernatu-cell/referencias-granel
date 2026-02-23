@@ -71,34 +71,54 @@ function graphUrl(path) {
   return `https://graph.microsoft.com/v1.0${path}`;
 }
 
+function handleAxiosError(err) {
+  if (err.response) {
+    const { status, data } = err.response;
+    const detail = data && data.error
+      ? `${data.error.code}: ${data.error.message}`
+      : JSON.stringify(data);
+    const reqUrl = err.config && err.config.url ? err.config.url : '';
+    const e = new Error(`Graph API ${status} - ${detail} [URL: ${reqUrl}]`);
+    e.status = status;
+    throw e;
+  }
+  throw err;
+}
+
 async function graphGet(path) {
   const token = await getAccessToken();
-  const response = await axios.get(graphUrl(path), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return response.data;
+  try {
+    const response = await axios.get(graphUrl(path), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  } catch (err) { handleAxiosError(err); }
 }
 
 async function graphPost(path, body) {
   const token = await getAccessToken();
-  const response = await axios.post(graphUrl(path), body, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-  return response.data;
+  try {
+    const response = await axios.post(graphUrl(path), body, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response.data;
+  } catch (err) { handleAxiosError(err); }
 }
 
 async function graphPatch(path, body) {
   const token = await getAccessToken();
-  const response = await axios.patch(graphUrl(path), body, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-  return response.data;
+  try {
+    const response = await axios.patch(graphUrl(path), body, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response.data;
+  } catch (err) { handleAxiosError(err); }
 }
 
 // ─── Worksheet helpers ─────────────────────────────────────────────────────
@@ -195,4 +215,79 @@ async function addReferencia(data) {
   return { sheetRow: nextRow, ...data };
 }
 
-module.exports = { getReferencias, addReferencia };
+/**
+ * Step-by-step diagnostic: tests token, site, file, and worksheets.
+ * Returns an object with results for each step.
+ */
+async function diagnose() {
+  const result = {
+    env: {
+      TENANT_ID: TENANT_ID ? '✓ set' : '✗ missing',
+      CLIENT_ID: CLIENT_ID ? '✓ set' : '✗ missing',
+      CLIENT_SECRET: CLIENT_SECRET ? '✓ set' : '✗ missing',
+      SITE_ID: SITE_ID || '✗ missing',
+      FILE_ID: FILE_ID || '(not set)',
+      FILE_PATH: FILE_PATH || '(not set)',
+    },
+    constructedBase: null,
+    steps: {},
+  };
+
+  // Show constructed URL
+  try {
+    result.constructedBase = getWorksheetBase();
+  } catch (e) {
+    result.constructedBase = `ERROR: ${e.message}`;
+  }
+
+  // Step 1: token
+  try {
+    await getAccessToken();
+    result.steps.token = 'OK';
+  } catch (e) {
+    result.steps.token = `FAIL: ${e.message}`;
+    return result;
+  }
+
+  // Step 2: site
+  try {
+    const site = await graphGet(`/sites/${SITE_ID}`);
+    result.steps.site = `OK - ${site.displayName || site.name || site.id}`;
+  } catch (e) {
+    result.steps.site = `FAIL: ${e.message}`;
+    return result;
+  }
+
+  // Step 3: file access
+  const filePath = FILE_ID
+    ? `/sites/${SITE_ID}/drive/items/${FILE_ID}`
+    : (() => {
+        const enc = FILE_PATH.split('/').map(encodeURIComponent).join('/');
+        return `/sites/${SITE_ID}/drive/root:${enc}`;
+      })();
+  try {
+    const file = await graphGet(filePath);
+    result.steps.file = `OK - ${file.name || file.id}`;
+  } catch (e) {
+    result.steps.file = `FAIL: ${e.message}`;
+    return result;
+  }
+
+  // Step 4: list worksheets
+  const wbPath = FILE_ID
+    ? `/sites/${SITE_ID}/drive/items/${FILE_ID}/workbook/worksheets`
+    : (() => {
+        const enc = FILE_PATH.split('/').map(encodeURIComponent).join('/');
+        return `/sites/${SITE_ID}/drive/root:${enc}:/workbook/worksheets`;
+      })();
+  try {
+    const wb = await graphGet(wbPath);
+    result.steps.worksheets = (wb.value || []).map((w) => w.name);
+  } catch (e) {
+    result.steps.worksheets = `FAIL: ${e.message}`;
+  }
+
+  return result;
+}
+
+module.exports = { getReferencias, addReferencia, diagnose };

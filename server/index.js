@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const referenciasRouter = require('./routes/referencias');
+const { diagnose } = require('./services/sharepointService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -25,6 +26,16 @@ app.use(express.static(clientDist));
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Diagnostic endpoint - remove after debugging
+app.get('/api/debug', async (req, res) => {
+  try {
+    const result = await diagnose();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Routes
