@@ -133,13 +133,9 @@ function encodePath(p) {
 function getDriveBase() {
   if (FILE_ID) return `/sites/${SITE_ID}/drive/items/${FILE_ID}`;
   if (DRIVE_ID) {
-    // FILE_PATH may start with the library name as first segment - strip it
-    // e.g. /mkt/Catalogos/... with DRIVE_ID pointing to "mkt" library
-    // The path inside the drive starts after the library name
-    const parts = FILE_PATH.replace(/^\//, '').split('/');
-    // If first segment matches the library, skip it; otherwise use full path
-    const drivePath = parts.length > 1 ? '/' + parts.slice(1).join('/') : FILE_PATH;
-    const encoded = encodePath(drivePath);
+    // When DRIVE_ID is set, FILE_PATH must be the path *inside* that drive.
+    // e.g. /01_GRANEL/02_ GRANEL ITALIA/.../NUEVOS DESARROLLOS GRANEL.xlsx
+    const encoded = encodePath(FILE_PATH);
     return `/sites/${SITE_ID}/drives/${DRIVE_ID}/root:${encoded}`;
   }
   if (FILE_PATH) {
