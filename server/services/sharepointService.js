@@ -8,6 +8,7 @@ const SITE_ID = process.env.SITE_ID;
 const FILE_ID = process.env.FILE_ID;
 const FILE_PATH = process.env.FILE_PATH;
 const DRIVE_ID = process.env.DRIVE_ID; // optional: specific document library drive ID
+const SHAREPOINT_HOST = process.env.SHAREPOINT_HOST; // e.g. natuaromatic.sharepoint.com
 
 // Row index (1-based) where 2026 data starts in the Excel sheet.
 // Row 56 in the spreadsheet corresponds to index 55 (0-based), but the
@@ -316,6 +317,44 @@ async function diagnose() {
         }
       }
     }
+
+    // Try to find the site using SHAREPOINT_HOST + first path segment
+    // e.g. FILE_PATH=/mkt/Catalogos/... → look for site at /mkt
+    if (SHAREPOINT_HOST && FILE_PATH) {
+      const segments = FILE_PATH.replace(/^\//, '').split('/');
+      const sitePath = segments[0]; // 'mkt'
+      const fileInSite = '/' + segments.slice(1).join('/'); // '/Catalogos/...'
+
+      try {
+        const altSite = await graphGet(`/sites/${SHAREPOINT_HOST}:/${sitePath}`);
+        const altSiteId = altSite.id;
+        result.steps.subsiteFound = {
+          siteId: altSiteId,
+          name: altSite.displayName || altSite.name,
+          hint: `→ Update SITE_ID to: ${altSiteId}`,
+        };
+
+        // List drives in that subsite
+        const altDrivesRes = await graphGet(`/sites/${altSiteId}/drives`);
+        const altDrives = altDrivesRes.value || [];
+        result.steps.subsiteDrives = altDrives.map((d) => ({ id: d.id, name: d.name }));
+
+        // Search the file in each drive of the subsite
+        const encFile = encodePath(fileInSite);
+        result.steps.subsiteFileSearch = {};
+        for (const d of altDrives) {
+          try {
+            const f = await graphGet(`/sites/${altSiteId}/drives/${d.id}/root:${encFile}`);
+            result.steps.subsiteFileSearch[d.name] = `FOUND - ${f.name} | DRIVE_ID=${d.id} | SITE_ID=${altSiteId}`;
+          } catch (e3) {
+            result.steps.subsiteFileSearch[d.name] = `not found`;
+          }
+        }
+      } catch (e2) {
+        result.steps.subsiteFound = `No subsite at /${sitePath}: ${e2.message}`;
+      }
+    }
+
     return result;
   }
 
