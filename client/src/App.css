@@ -24,13 +24,6 @@
   font-weight: 500;
 }
 
-/* Grid */
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
-}
-
 /* State containers */
 .state-container {
   display: flex;
@@ -270,5 +263,4 @@
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .main { padding: 16px 16px 32px; }
-  .grid { grid-template-columns: 1fr; }
 }
