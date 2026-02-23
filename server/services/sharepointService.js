@@ -6,6 +6,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const SITE_ID = process.env.SITE_ID;
 const FILE_ID = process.env.FILE_ID;
+const FILE_PATH = process.env.FILE_PATH;
 
 // Row index (1-based) where 2026 data starts in the Excel sheet.
 // Row 56 in the spreadsheet corresponds to index 55 (0-based), but the
@@ -101,7 +102,18 @@ async function graphPatch(path, body) {
 }
 
 // ─── Worksheet helpers ─────────────────────────────────────────────────────
-const WORKSHEET_BASE = `/sites/${SITE_ID}/drive/items/${FILE_ID}/workbook/worksheets('NUEVAS REFERENCIAS')`;
+// Support both FILE_ID (drive item ID) and FILE_PATH (relative path in SharePoint)
+function getWorksheetBase() {
+  if (FILE_ID) {
+    return `/sites/${SITE_ID}/drive/items/${FILE_ID}/workbook/worksheets('NUEVAS REFERENCIAS')`;
+  }
+  if (FILE_PATH) {
+    // Graph API path-based access: /sites/{id}/drive/root:/{path}:/workbook/...
+    const encodedPath = FILE_PATH.split('/').map(encodeURIComponent).join('/');
+    return `/sites/${SITE_ID}/drive/root:${encodedPath}:/workbook/worksheets('NUEVAS REFERENCIAS')`;
+  }
+  throw new Error('Falta variable de entorno: FILE_ID o FILE_PATH');
+}
 
 /**
  * Fetch all used rows from DATA_START_ROW onwards.
@@ -109,7 +121,7 @@ const WORKSHEET_BASE = `/sites/${SITE_ID}/drive/items/${FILE_ID}/workbook/worksh
  */
 async function fetchAllRows() {
   // Get used range of the entire worksheet
-  const data = await graphGet(`${WORKSHEET_BASE}/usedRange`);
+  const data = await graphGet(`${getWorksheetBase()}/usedRange`);
   const allValues = data.values; // 2D array, row-major
 
   if (!allValues || allValues.length < DATA_START_ROW) {
@@ -128,7 +140,7 @@ async function fetchAllRows() {
  * Find the next empty row after the data (1-based row number in the sheet).
  */
 async function findNextEmptyRow() {
-  const data = await graphGet(`${WORKSHEET_BASE}/usedRange`);
+  const data = await graphGet(`${getWorksheetBase()}/usedRange`);
   const allValues = data.values || [];
   // Next row = total rows used + 1  (1-based)
   return allValues.length + 1;
@@ -141,7 +153,7 @@ async function findNextEmptyRow() {
 async function writeRow(rowNumber, values) {
   const range = `A${rowNumber}:P${rowNumber}`;
   await graphPatch(
-    `${WORKSHEET_BASE}/range(address='${encodeURIComponent(range)}')`,
+    `${getWorksheetBase()}/range(address='${encodeURIComponent(range)}')`,
     { values: [values] }
   );
 }
