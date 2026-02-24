@@ -325,6 +325,39 @@ function getWorkbookBase() {
 }
 
 /**
+ * Resolves the Excel file's Graph item ID and returns a workbook base URL of
+ * the form /drives/{driveId}/items/{itemId}/workbook.
+ *
+ * This item-ID-based path bypasses some SharePoint tenant WAC routing
+ * restrictions that affect the path-based URL (/drives/.../root:...:/workbook).
+ * Falls back to getWorkbookBase() if the metadata fetch fails.
+ */
+async function resolveWorkbookBase(token) {
+  try {
+    let metaPath;
+    if (FILE_ID) {
+      metaPath = `/sites/${SITE_ID}/drive/items/${FILE_ID}`;
+    } else if (DRIVE_ID) {
+      metaPath = `/sites/${SITE_ID}/drives/${DRIVE_ID}/root:${encodePath(FILE_PATH)}`;
+    } else {
+      metaPath = `/sites/${SITE_ID}/drive/root:${encodePath(FILE_PATH)}`;
+    }
+    const resp = await axios.get(graphUrl(metaPath), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const itemId = resp.data.id;
+    const driveId = (resp.data.parentReference || {}).driveId || DRIVE_ID;
+    if (itemId && driveId) {
+      console.log(`[resolveWorkbookBase] item-ID path: /drives/${driveId}/items/${itemId}/workbook`);
+      return `/drives/${driveId}/items/${itemId}/workbook`;
+    }
+  } catch (e) {
+    console.warn('[resolveWorkbookBase] could not resolve item ID, using path-based URL:', e.message);
+  }
+  return getWorkbookBase();
+}
+
+/**
  * Retry a Graph API call on transient failures (423 locked, 429 rate-limit, 503).
  * Uses exponential back-off: base * 2^(attempt-1) ms.
  */
@@ -366,7 +399,9 @@ async function withRetry(fn, label, maxAttempts = 4, baseMs = 1000) {
  */
 async function appendRowViaWorkbookSession(rowValues, nombreProducto) {
   const token = await getAccessToken();
-  const workbookBase = getWorkbookBase();
+  // Use item-ID URL (/drives/{id}/items/{id}/workbook) — avoids some tenant WAC
+  // routing issues that affect the path-based URL (/drives/.../root:...:/workbook)
+  const workbookBase = await resolveWorkbookBase(token);
   const base = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
 
@@ -696,10 +731,11 @@ async function diagnose() {
     result.steps.download = `FAIL: ${e.message}`;
   }
 
-  // Step 6: Workbook API probe (sessionless) — tests WAC access
+  // Step 6: Workbook API probe (sessionless, item-ID URL) — tests WAC access
   try {
     const token = await getAccessToken();
-    const workbookBase = getWorkbookBase();
+    const workbookBase = await resolveWorkbookBase(token);
+    result.steps.workbookBaseUrl = workbookBase;
     const resp = await axios.get(
       graphUrl(`${workbookBase}/worksheets`),
       { headers: { Authorization: `Bearer ${token}` } }
