@@ -80,6 +80,9 @@ router.post('/', async (req, res, next) => {
     res.status(201).json({ success: true, data: result });
   } catch (err) {
     console.error('[POST /api/referencias]', err.message);
+    if (err.code === 'DUPLICATE') {
+      return res.status(409).json({ success: false, error: err.message });
+    }
     next(err);
   }
 });
