@@ -341,9 +341,10 @@ async function appendRowViaWorkbookSession(rowValues, nombreProducto) {
   const base = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
 
-  // ── 1. Try persistent session ONCE; fall through immediately on 423 ───────
-  // Do NOT retry createSession — if the file is open in Excel Online (423),
-  // go sessionless right away (Microsoft creates an auto-session per request).
+  // ── 1. Try persistent session ONCE; fall through on 423 or WAC 403 ────────
+  // 423: file open in Excel Online → go sessionless immediately
+  // 403: app lacks WAC session permission → still try sessionless reads/writes
+  //      (direct range PATCH often works without a WAC session)
   let sessionId = null;
   try {
     const res = await axios.post(
@@ -354,8 +355,8 @@ async function appendRowViaWorkbookSession(rowValues, nombreProducto) {
     sessionId = res.data.id;
   } catch (err) {
     const status = err.response && err.response.status;
-    if (status === 423) {
-      console.warn('[appendRowViaWorkbookSession] createSession 423 – proceeding sessionless');
+    if (status === 423 || status === 403) {
+      console.warn('[appendRowViaWorkbookSession] createSession failed (%d) – proceeding sessionless', status);
     } else {
       throw err;
     }
@@ -470,11 +471,16 @@ async function addRowWithExceljs(rowValues, nombreProducto) {
 /**
  * POST a new referencia row to the Excel.
  *
- * Primary path: Workbook API (works even when file is open, no formatting loss).
- * Fallback for WAC/permission errors (403): binary download+ExcelJS write+upload
- *   — ExcelJS preserves all cell formatting unlike xlsx.js.
- *   — Only works when the file is NOT open in Excel Online (PUT returns 423 if open).
- * New solicitudes always receive estado = 'PENDIENTE'.
+ * Flow:
+ * 1. Try Workbook API with persistent session.
+ *    - 423: file open → skip session, try sessionless (MS auto-session coauthors)
+ *    - 403 WAC: createSession blocked → skip session, try sessionless range PATCH
+ *      (direct range PATCH often works without WAC session permission)
+ * 2. If sessionless Workbook API also returns 403 → fall to ExcelJS binary.
+ * 3. ExcelJS binary: download → add row (preserves all cell formatting) → PUT upload.
+ *    - Only works when file is NOT open in Excel Online (PUT returns 423 if open).
+ * 4. If binary PUT returns 423 → return a user-visible error asking them to
+ *    either close the file OR have the admin add Sites.ReadWrite.All in Azure.
  *
  * @param {Object} data  Fields matching the COLUMNS mapping
  */
