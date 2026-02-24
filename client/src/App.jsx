@@ -25,35 +25,42 @@ export default function App() {
     fechaHasta: '',
   });
 
-  // Derive unique filter options from data
+  // Derive unique filter options from data — deduplicated case-insensitively
+  // so "ESPAÑA" and "España" don't appear as two separate entries.
   const opciones = useMemo(() => {
-    const comerciales = [...new Set(referencias.map((r) => r.nombreComercial).filter(Boolean))].sort();
-    // Exclude internal codes that are not real product types (e.g. "vvcc")
-    const TIPOS_EXCLUIDOS = ['vvcc'];
-    const tipos = [
-      ...new Set(
-        referencias
-          .map((r) => r.tipoProducto)
-          .filter((t) => t && !TIPOS_EXCLUIDOS.includes(t.toLowerCase()))
+    // Normalise to UPPERCASE and deduplicate, then sort alphabetically
+    function normalizeOptions(values, excludeLower = []) {
+      const seen = new Set();
+      const result = [];
+      values.filter(Boolean).forEach((v) => {
+        const norm = v.trim().toUpperCase();
+        if (norm && !seen.has(norm) && !excludeLower.includes(norm.toLowerCase())) {
+          seen.add(norm);
+          result.push(norm);
+        }
+      });
+      return result.sort((a, b) => a.localeCompare(b, 'es'));
+    }
+
+    return {
+      comerciales: normalizeOptions(referencias.map((r) => r.nombreComercial)),
+      tipos: normalizeOptions(
+        referencias.map((r) => r.tipoProducto),
+        ['vvcc']
       ),
-    ].sort();
-    const categorias = [...new Set(referencias.map((r) => r.categoria).filter(Boolean))].sort();
-    const estados = [...new Set(referencias.map((r) => r.estado).filter(Boolean))].sort();
-    return { comerciales, tipos, categorias, estados };
+      categorias: normalizeOptions(referencias.map((r) => r.categoria)),
+    };
   }, [referencias]);
 
-  // Filtered data for the table
+  // Filtered data for the table — all text comparisons are case-insensitive
   const filtered = useMemo(() => {
     return referencias.filter((r) => {
-      if (filters.comercial && r.nombreComercial !== filters.comercial) return false;
-      // Case-insensitive comparison for tipo producto
+      if (filters.comercial &&
+        (r.nombreComercial || '').trim().toUpperCase() !== filters.comercial) return false;
       if (filters.tipoProducto &&
-        (r.tipoProducto || '').trim().toLowerCase() !== filters.tipoProducto.trim().toLowerCase()
-      ) return false;
-      // Case-insensitive comparison for categoría (data may be uppercase)
+        (r.tipoProducto || '').trim().toUpperCase() !== filters.tipoProducto) return false;
       if (filters.categoria &&
-        (r.categoria || '').trim().toLowerCase() !== filters.categoria.trim().toLowerCase()
-      ) return false;
+        (r.categoria || '').trim().toUpperCase() !== filters.categoria) return false;
       if (filters.estado) {
         const estado = r.estado?.trim() || '';
         if (filters.estado === 'SIN_ESTADO') {

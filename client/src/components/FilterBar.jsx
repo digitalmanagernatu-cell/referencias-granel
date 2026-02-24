@@ -1,6 +1,6 @@
 import './FilterBar.css';
 
-const ESTADOS_FIJOS = ['APROBADO', 'EVALUACIÓN', 'TESTANDO'];
+const ESTADOS_FIJOS = ['APROBADO', 'EVALUACIÓN', 'PENDIENTE', 'TESTANDO'];
 
 export default function FilterBar({ filters, setFilters, opciones, onClear, activeCount }) {
   const update = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));

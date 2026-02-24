@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import './SolicitudModal.css';
 
@@ -24,20 +24,31 @@ const INITIAL_FORM = {
 
 const INITIAL_ERRORS = {};
 
+const MAX_RETRIES = 5;
+const RETRY_SECS = 15;
+
 export default function SolicitudModal({ onClose, onSuccess }) {
   const [form, setForm] = useState(INITIAL_FORM);
   const [errors, setErrors] = useState(INITIAL_ERRORS);
   const [submitting, setSubmitting] = useState(false);
+  const [retryCountdown, setRetryCountdown] = useState(0); // > 0 = waiting to retry
+
+  const timerRef = useRef(null);
+  const pendingRef = useRef(null); // { payload, attempt }
 
   const isOtroComercial = form.nombreComercial === 'otro';
   const isExclusiva = form.tipoProducto === 'Exclusiva';
+  const isRetrying = retryCountdown > 0;
 
-  // Close on Escape
+  // Cleanup interval on unmount
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+
+  // Close on Escape — blocked while retrying
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    const handler = (e) => { if (e.key === 'Escape' && !isRetrying) onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
+  }, [onClose, isRetrying]);
 
   const update = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -61,51 +72,81 @@ export default function SolicitudModal({ onClose, onSuccess }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
+  const stopRetry = () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    setRetryCountdown(0);
+    pendingRef.current = null;
+  };
 
+  const scheduleRetry = (payload, attempt) => {
+    pendingRef.current = { payload, attempt };
+    let secs = RETRY_SECS;
+    setRetryCountdown(secs);
+    timerRef.current = setInterval(() => {
+      secs--;
+      setRetryCountdown(secs);
+      if (secs <= 0) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+        setRetryCountdown(0);
+        doFetch(pendingRef.current.payload, pendingRef.current.attempt);
+      }
+    }, 1000);
+  };
+
+  const doFetch = async (payload, attempt) => {
     setSubmitting(true);
     try {
-      const payload = {
-        nombreComercial: isOtroComercial
-          ? form.nombreComercialCustom.trim()
-          : form.nombreComercial,
-        nombreProducto: form.nombreProducto.trim(),
-        tipoProducto: form.tipoProducto,
-        categoria: form.categoria,
-        peticionFechaLanzamiento: form.peticionFechaLanzamiento.trim(),
-        enlaces: form.enlaces.trim(),
-        nombreCliente: isExclusiva ? form.nombreCliente.trim() : '',
-      };
-
       const res = await fetch('/api/referencias', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       const json = await res.json();
-
       if (!res.ok) {
-        throw new Error(json.error || `Error ${res.status}`);
+        const err = new Error(json.error || `Error ${res.status}`);
+        err.httpStatus = res.status;
+        throw err;
       }
-
+      stopRetry();
       toast.success('Referencia añadida correctamente');
       onSuccess();
     } catch (err) {
-      toast.error(`Error al guardar: ${err.message}`);
+      if (err.httpStatus === 423 && attempt < MAX_RETRIES) {
+        scheduleRetry(payload, attempt + 1);
+      } else {
+        stopRetry();
+        toast.error(`Error al guardar: ${err.message}`);
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+    stopRetry();
+    const payload = {
+      nombreComercial: isOtroComercial
+        ? form.nombreComercialCustom.trim()
+        : form.nombreComercial,
+      nombreProducto: form.nombreProducto.trim(),
+      tipoProducto: form.tipoProducto,
+      categoria: form.categoria,
+      peticionFechaLanzamiento: form.peticionFechaLanzamiento.trim(),
+      enlaces: form.enlaces.trim(),
+      nombreCliente: isExclusiva ? form.nombreCliente.trim() : '',
+    };
+    doFetch(payload, 0);
+  };
+
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && !isRetrying && onClose()}>
       <div className="modal modal-solicitud" role="dialog" aria-modal="true" aria-labelledby="solicitud-title">
         <div className="modal-header">
           <h2 className="modal-title" id="solicitud-title">Solicitar nueva referencia</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar" disabled={submitting}>×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Cerrar" disabled={submitting || isRetrying}>×</button>
         </div>
 
         <form onSubmit={handleSubmit} noValidate>
@@ -265,19 +306,32 @@ export default function SolicitudModal({ onClose, onSuccess }) {
             </div>
           </div>
 
+          {isRetrying && (
+            <div className="retry-notice">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              Archivo en uso. Reintentando en {retryCountdown}s…
+              (intento {pendingRef.current?.attempt ?? 0}/{MAX_RETRIES})
+              <button type="button" className="retry-cancel" onClick={stopRetry}>
+                Cancelar
+              </button>
+            </div>
+          )}
+
           <div className="modal-footer">
             <button
               type="button"
               className="btn btn-outline"
               onClick={onClose}
-              disabled={submitting}
+              disabled={submitting || isRetrying}
             >
               Cancelar
             </button>
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={submitting}
+              disabled={submitting || isRetrying}
             >
               {submitting ? (
                 <>
