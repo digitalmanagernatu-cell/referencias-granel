@@ -40,6 +40,22 @@ export default function FilterBar({ filters, setFilters, opciones, onClear, acti
           </select>
         </div>
 
+        {/* Tipo Fragancia */}
+        <div className="filter-group">
+          <label className="filter-label" htmlFor="f-tipo-fragancia">Tipo Fragancia</label>
+          <select
+            id="f-tipo-fragancia"
+            className="filter-control"
+            value={filters.tipoFragancia}
+            onChange={(e) => update('tipoFragancia', e.target.value)}
+          >
+            <option value="">Todos</option>
+            {opciones.tiposFragancia.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Categoría */}
         <div className="filter-group">
           <label className="filter-label" htmlFor="f-categoria">Categoría</label>
