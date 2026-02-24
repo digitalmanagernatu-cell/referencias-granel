@@ -68,6 +68,35 @@ async function getAccessToken() {
   return result.accessToken;
 }
 
+/**
+ * Decode the JWT access token (without verifying) and return the
+ * application permissions (roles) that Azure has actually granted.
+ */
+async function getTokenPermissions() {
+  try {
+    const token = await getAccessToken();
+    const raw = token.split('.')[1];
+    // base64url → base64 → parse
+    const padded = raw.replace(/-/g, '+').replace(/_/g, '/').padEnd(
+      raw.length + (4 - (raw.length % 4)) % 4, '='
+    );
+    const payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+    const roles = payload.roles || [];
+    const hasWorkbookWrite = roles.includes('Sites.ReadWrite.All') || roles.includes('Files.ReadWrite.All');
+    return {
+      appId: payload.appid || payload.azp || '?',
+      tenantId: payload.tid || '?',
+      roles,
+      hasWorkbookWrite,
+      verdict: hasWorkbookWrite
+        ? '✓ Permisos de escritura Workbook OK'
+        : '✗ FALTA Sites.ReadWrite.All → el Workbook API (WAC) no funcionará',
+    };
+  } catch (e) {
+    return { error: `No se pudo decodificar el token: ${e.message}` };
+  }
+}
+
 // ─── Graph API helpers ─────────────────────────────────────────────────────
 function graphUrl(path) {
   return `https://graph.microsoft.com/v1.0${path}`;
@@ -559,6 +588,9 @@ async function diagnose() {
     result.constructedContentPath = `ERROR: ${e.message}`;
   }
 
+  // Step 0: token permissions (decode JWT roles)
+  result.permissions = await getTokenPermissions();
+
   // Step 1: token
   try {
     await getAccessToken();
@@ -664,7 +696,32 @@ async function diagnose() {
     result.steps.download = `FAIL: ${e.message}`;
   }
 
+  // Step 6: Workbook API probe (sessionless) — tests WAC access
+  try {
+    const token = await getAccessToken();
+    const workbookBase = getWorkbookBase();
+    const resp = await axios.get(
+      graphUrl(`${workbookBase}/worksheets`),
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const names = (resp.data.value || []).map((w) => w.name);
+    result.steps.workbookApi = `OK – hojas: ${names.join(', ')}`;
+  } catch (e) {
+    const status = e.response && e.response.status;
+    const msg = e.response && e.response.data && e.response.data.error
+      ? `${status} ${e.response.data.error.code}: ${e.response.data.error.message}`
+      : `${status || '?'} ${e.message}`;
+    result.steps.workbookApi = `FAIL – ${msg}`;
+    if (status === 403) {
+      result.steps.workbookApiFix =
+        'Añade el permiso "Sites.ReadWrite.All" (Application) en Azure AD → ' +
+        'Azure Portal → App registrations → tu app → API permissions → ' +
+        'Add a permission → Microsoft Graph → Application permissions → ' +
+        'Sites.ReadWrite.All → Grant admin consent';
+    }
+  }
+
   return result;
 }
 
-module.exports = { getReferencias, addReferencia, diagnose };
+module.exports = { getReferencias, addReferencia, diagnose, getTokenPermissions };

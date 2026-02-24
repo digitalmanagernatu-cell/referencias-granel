@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const referenciasRouter = require('./routes/referencias');
-const { diagnose } = require('./services/sharepointService');
+const { diagnose, getTokenPermissions } = require('./services/sharepointService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,11 +28,21 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Diagnostic endpoint - remove after debugging
+// Diagnostic endpoint
 app.get('/api/debug', async (req, res) => {
   try {
     const result = await diagnose();
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Quick permissions check — decodes the app token and probes the Workbook API
+app.get('/api/permissions', async (req, res) => {
+  try {
+    const perms = await getTokenPermissions();
+    res.json(perms);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
