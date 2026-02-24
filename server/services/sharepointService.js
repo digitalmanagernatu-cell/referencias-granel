@@ -134,18 +134,51 @@ async function downloadExcel() {
   } catch (err) { handleAxiosError(err); }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function uploadExcel(buffer) {
   const token = await getAccessToken();
-  try {
-    await axios.put(graphUrl(getFileContentPath()), buffer, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      },
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-    });
-  } catch (err) { handleAxiosError(err); }
+  const url = graphUrl(getFileContentPath());
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+
+  // Retry up to 3 times on 423 (file locked) with exponential backoff: 3s, 6s, 12s
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await axios.put(url, buffer, {
+        headers,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      });
+      return; // success
+    } catch (err) {
+      const status = err.response && err.response.status;
+      const isLocked = status === 423;
+      const isLastAttempt = attempt === MAX_RETRIES;
+
+      if (isLocked && !isLastAttempt) {
+        console.warn(`[uploadExcel] Archivo bloqueado (423), reintento ${attempt}/${MAX_RETRIES - 1}...`);
+        await sleep(3000 * attempt); // 3s, 6s
+        continue;
+      }
+
+      if (isLocked) {
+        const e = new Error(
+          'El archivo Excel está siendo utilizado por otro usuario en este momento. ' +
+          'Cierra el archivo en Excel/SharePoint y vuelve a intentarlo en unos segundos.'
+        );
+        e.status = 423;
+        throw e;
+      }
+
+      handleAxiosError(err);
+    }
+  }
 }
 
 // ─── XLSX parsing ──────────────────────────────────────────────────────────
