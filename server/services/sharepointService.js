@@ -19,19 +19,20 @@ const COLUMNS = [
   'numero',              // A
   'nombreComercial',     // B
   'tipoProducto',        // C
-  'categoria',           // D
-  'nombreProducto',      // E
-  'nRefAsignado',        // F
-  'nombreCliente',       // G
-  'peticionFechaLanzamiento', // H
-  'fechaSolicitudComercial',  // I
-  'proveedor',           // J
-  'fechaSolicitudProveedor',  // K
-  'fechaLlegadaPropuesta',    // L
-  'estado',              // M
-  'fechaValidacionNatu', // N
-  'muestrasLaboratorio', // O
-  'enlaces',             // P
+  'tipoFragancia',       // D  ← nueva columna (FEMENINO/MASCULINO/UNISEX)
+  'categoria',           // E
+  'nombreProducto',      // F
+  'nRefAsignado',        // G
+  'nombreCliente',       // H
+  'peticionFechaLanzamiento', // I
+  'fechaSolicitudComercial',  // J
+  'proveedor',           // K
+  'fechaSolicitudProveedor',  // L
+  'fechaLlegadaPropuesta',    // M
+  'estado',              // N
+  'fechaValidacionNatu', // O
+  'muestrasLaboratorio', // P
+  'enlaces',             // Q
 ];
 
 // ─── MSAL client ───────────────────────────────────────────────────────────
@@ -339,8 +340,11 @@ async function appendRowViaWorkbookSession(rowValues, nombreProducto) {
   }
 
   try {
-    // ── 2. Scan column E to find last real data row + duplicate check ─────────
-    const searchRange = `E${DATA_START_ROW}:E${DATA_START_ROW + 500}`;
+    // ── 2. Scan nombreProducto column to find last real data row + duplicate ──
+    // Derive column letter dynamically so adding/removing columns never breaks this.
+    const npIdx = COLUMNS.indexOf('nombreProducto'); // 5 → col F
+    const npCol = String.fromCharCode(65 + npIdx);   // 'F'
+    const searchRange = `${npCol}${DATA_START_ROW}:${npCol}${DATA_START_ROW + 500}`;
     const colERes = await withRetry(
       () => axios.get(graphUrl(`${sheetBase}/range(address='${searchRange}')`), { headers: reqHeaders }),
       'readColE'
