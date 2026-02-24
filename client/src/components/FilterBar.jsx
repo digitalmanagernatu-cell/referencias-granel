@@ -50,8 +50,9 @@ export default function FilterBar({ filters, setFilters, opciones, onClear, acti
             onChange={(e) => update('categoria', e.target.value)}
           >
             <option value="">Todas</option>
-            <option value="Perfumería">Perfumería</option>
-            <option value="Ambientación">Ambientación</option>
+            {opciones.categorias.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
           </select>
         </div>
 

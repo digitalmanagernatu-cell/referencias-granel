@@ -28,7 +28,15 @@ export default function App() {
   // Derive unique filter options from data
   const opciones = useMemo(() => {
     const comerciales = [...new Set(referencias.map((r) => r.nombreComercial).filter(Boolean))].sort();
-    const tipos = [...new Set(referencias.map((r) => r.tipoProducto).filter(Boolean))].sort();
+    // Exclude internal codes that are not real product types (e.g. "vvcc")
+    const TIPOS_EXCLUIDOS = ['vvcc'];
+    const tipos = [
+      ...new Set(
+        referencias
+          .map((r) => r.tipoProducto)
+          .filter((t) => t && !TIPOS_EXCLUIDOS.includes(t.toLowerCase()))
+      ),
+    ].sort();
     const categorias = [...new Set(referencias.map((r) => r.categoria).filter(Boolean))].sort();
     const estados = [...new Set(referencias.map((r) => r.estado).filter(Boolean))].sort();
     return { comerciales, tipos, categorias, estados };
@@ -38,8 +46,14 @@ export default function App() {
   const filtered = useMemo(() => {
     return referencias.filter((r) => {
       if (filters.comercial && r.nombreComercial !== filters.comercial) return false;
-      if (filters.tipoProducto && r.tipoProducto !== filters.tipoProducto) return false;
-      if (filters.categoria && r.categoria !== filters.categoria) return false;
+      // Case-insensitive comparison for tipo producto
+      if (filters.tipoProducto &&
+        (r.tipoProducto || '').trim().toLowerCase() !== filters.tipoProducto.trim().toLowerCase()
+      ) return false;
+      // Case-insensitive comparison for categoría (data may be uppercase)
+      if (filters.categoria &&
+        (r.categoria || '').trim().toLowerCase() !== filters.categoria.trim().toLowerCase()
+      ) return false;
       if (filters.estado) {
         const estado = r.estado?.trim() || '';
         if (filters.estado === 'SIN_ESTADO') {

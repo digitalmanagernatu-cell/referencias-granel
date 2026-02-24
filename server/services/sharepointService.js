@@ -169,17 +169,34 @@ function parseSheet(buffer) {
   return { workbook, sheet, allValues };
 }
 
+// ─── Normalization ──────────────────────────────────────────────────────────
+// Canonical names for common misspellings / abbreviations in the Excel data
+const TIPO_NORMALIZACION = {
+  'BDY MIST': 'BODY MIST',
+  'BODY MIST ': 'BODY MIST',
+};
+
+function normalizeTipo(raw) {
+  if (!raw) return '';
+  const upper = raw.trim().toUpperCase();
+  return TIPO_NORMALIZACION[upper] || raw.trim();
+}
+
 // ─── Conversion helpers ────────────────────────────────────────────────────
 function rowToObject(row, sheetRowNumber) {
   const obj = { _sheetRow: sheetRowNumber };
   COLUMNS.forEach((col, i) => {
-    obj[col] = row[i] !== undefined && row[i] !== null ? String(row[i]).trim() : '';
+    let val = row[i] !== undefined && row[i] !== null ? String(row[i]).trim() : '';
+    if (col === 'tipoProducto') val = normalizeTipo(val);
+    obj[col] = val;
   });
   return obj;
 }
 
+// A row is valid only when it has a product name — filters out year headers
+// (e.g. a cell that says "2026") and any other separator rows.
 function isRowEmpty(obj) {
-  return COLUMNS.every((col) => !obj[col]);
+  return !obj.nombreProducto;
 }
 
 function objectToRow(obj) {
