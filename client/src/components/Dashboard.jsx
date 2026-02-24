@@ -88,29 +88,28 @@ export default function Dashboard({ referencias }) {
   const total = referencias.length;
 
   // KPI counts by estado (case-insensitive)
-  const KNOWN_ESTADOS = ['APROBADO', 'EVALUANDO', 'TESTANDO', 'PENDIENTE'];
   function countEstado(val) {
     return referencias.filter(
       (r) => (r.estado || '').trim().toUpperCase() === val
     ).length;
   }
-  const aprobadas  = countEstado('APROBADO');
-  const evaluando  = countEstado('EVALUANDO');
-  const testando   = countEstado('TESTANDO');
-  const pendiente  = countEstado('PENDIENTE');
-  const sinEstado  = referencias.filter((r) => {
-    const e = (r.estado || '').trim().toUpperCase();
-    return !e || !KNOWN_ESTADOS.includes(e);
-  }).length;
+  const aprobadas = countEstado('APROBADO');
+  const evaluando = countEstado('EVALUANDO');
+  const testando  = countEstado('TESTANDO');
 
-  // Slices for estado chart
-  const estadoSlices = [
-    { label: 'Aprobado',   value: aprobadas, color: '#16a34a' },
-    { label: 'Evaluando',  value: evaluando, color: '#ea580c' },
-    { label: 'Testando',   value: testando,  color: '#2563eb' },
-    { label: 'Pendiente',  value: pendiente, color: '#d97706' },
-    { label: 'Sin estado', value: sinEstado, color: '#94a3b8' },
-  ].filter((s) => s.value > 0);
+  function pct(n) {
+    return total > 0 ? Math.round((n / total) * 100) : 0;
+  }
+
+  // Slices for comercial chart
+  const comercialMap = {};
+  referencias.forEach((r) => {
+    const c = (r.nombreComercial || '').trim() || 'Sin comercial';
+    comercialMap[c] = (comercialMap[c] || 0) + 1;
+  });
+  const comercialSlices = Object.entries(comercialMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, value], i) => ({ label, value, color: getColor(i) }));
 
   // Slices for categoría
   const catMap = {};
@@ -120,7 +119,7 @@ export default function Dashboard({ referencias }) {
   });
   const catSlices = Object.entries(catMap)
     .sort((a, b) => b[1] - a[1])
-    .map(([label, value], i) => ({ label, value, color: getColor(i) }));
+    .map(([label, value], i) => ({ label, value, color: getColor(i + 5) }));
 
   // Slices for tipo de producto — grouped by base type (strips gender suffix)
   const tipoMap = {};
@@ -130,7 +129,7 @@ export default function Dashboard({ referencias }) {
   });
   const tipoSlices = Object.entries(tipoMap)
     .sort((a, b) => b[1] - a[1])
-    .map(([label, value], i) => ({ label, value, color: getColor(i + 5) }));
+    .map(([label, value], i) => ({ label, value, color: getColor(i + 10) }));
 
   return (
     <section className="dashboard">
@@ -140,28 +139,27 @@ export default function Dashboard({ referencias }) {
           <span className="kpi-label">Total solicitudes</span>
           <span className="kpi-value">{total}</span>
         </div>
-        <div className="kpi-card kpi-pendiente">
-          <span className="kpi-label">Pendientes</span>
-          <span className="kpi-value">{pendiente}</span>
-        </div>
         <div className="kpi-card kpi-evaluando">
           <span className="kpi-label">Evaluando</span>
           <span className="kpi-value">{evaluando}</span>
+          {total > 0 && <span className="kpi-pct">{pct(evaluando)}% del total</span>}
         </div>
         <div className="kpi-card kpi-testando">
           <span className="kpi-label">Testando</span>
           <span className="kpi-value">{testando}</span>
+          {total > 0 && <span className="kpi-pct">{pct(testando)}% del total</span>}
         </div>
         <div className="kpi-card kpi-aprobado">
           <span className="kpi-label">Aprobadas</span>
           <span className="kpi-value">{aprobadas}</span>
+          {total > 0 && <span className="kpi-pct">{pct(aprobadas)}% del total</span>}
         </div>
       </div>
 
       {/* Pie charts */}
       {total > 0 && (
         <div className="charts-row">
-          <ChartCard title="Por estado" slices={estadoSlices} />
+          <ChartCard title="Por comercial" slices={comercialSlices} />
           <ChartCard title="Por categoría" slices={catSlices} />
           <ChartCard title="Por tipo de producto" slices={tipoSlices} />
         </div>
