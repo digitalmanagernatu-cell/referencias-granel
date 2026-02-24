@@ -68,6 +68,35 @@ async function getAccessToken() {
   return result.accessToken;
 }
 
+/**
+ * Decode the JWT access token (without verifying) and return the
+ * application permissions (roles) that Azure has actually granted.
+ */
+async function getTokenPermissions() {
+  try {
+    const token = await getAccessToken();
+    const raw = token.split('.')[1];
+    // base64url → base64 → parse
+    const padded = raw.replace(/-/g, '+').replace(/_/g, '/').padEnd(
+      raw.length + (4 - (raw.length % 4)) % 4, '='
+    );
+    const payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+    const roles = payload.roles || [];
+    const hasWorkbookWrite = roles.includes('Sites.ReadWrite.All') || roles.includes('Files.ReadWrite.All');
+    return {
+      appId: payload.appid || payload.azp || '?',
+      tenantId: payload.tid || '?',
+      roles,
+      hasWorkbookWrite,
+      verdict: hasWorkbookWrite
+        ? '✓ Permisos de escritura Workbook OK'
+        : '✗ FALTA Sites.ReadWrite.All → el Workbook API (WAC) no funcionará',
+    };
+  } catch (e) {
+    return { error: `No se pudo decodificar el token: ${e.message}` };
+  }
+}
+
 // ─── Graph API helpers ─────────────────────────────────────────────────────
 function graphUrl(path) {
   return `https://graph.microsoft.com/v1.0${path}`;
@@ -296,6 +325,39 @@ function getWorkbookBase() {
 }
 
 /**
+ * Resolves the Excel file's Graph item ID and returns a workbook base URL of
+ * the form /drives/{driveId}/items/{itemId}/workbook.
+ *
+ * This item-ID-based path bypasses some SharePoint tenant WAC routing
+ * restrictions that affect the path-based URL (/drives/.../root:...:/workbook).
+ * Falls back to getWorkbookBase() if the metadata fetch fails.
+ */
+async function resolveWorkbookBase(token) {
+  try {
+    let metaPath;
+    if (FILE_ID) {
+      metaPath = `/sites/${SITE_ID}/drive/items/${FILE_ID}`;
+    } else if (DRIVE_ID) {
+      metaPath = `/sites/${SITE_ID}/drives/${DRIVE_ID}/root:${encodePath(FILE_PATH)}`;
+    } else {
+      metaPath = `/sites/${SITE_ID}/drive/root:${encodePath(FILE_PATH)}`;
+    }
+    const resp = await axios.get(graphUrl(metaPath), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const itemId = resp.data.id;
+    const driveId = (resp.data.parentReference || {}).driveId || DRIVE_ID;
+    if (itemId && driveId) {
+      console.log(`[resolveWorkbookBase] item-ID path: /drives/${driveId}/items/${itemId}/workbook`);
+      return `/drives/${driveId}/items/${itemId}/workbook`;
+    }
+  } catch (e) {
+    console.warn('[resolveWorkbookBase] could not resolve item ID, using path-based URL:', e.message);
+  }
+  return getWorkbookBase();
+}
+
+/**
  * Retry a Graph API call on transient failures (423 locked, 429 rate-limit, 503).
  * Uses exponential back-off: base * 2^(attempt-1) ms.
  */
@@ -337,7 +399,9 @@ async function withRetry(fn, label, maxAttempts = 4, baseMs = 1000) {
  */
 async function appendRowViaWorkbookSession(rowValues, nombreProducto) {
   const token = await getAccessToken();
-  const workbookBase = getWorkbookBase();
+  // Use item-ID URL (/drives/{id}/items/{id}/workbook) — avoids some tenant WAC
+  // routing issues that affect the path-based URL (/drives/.../root:...:/workbook)
+  const workbookBase = await resolveWorkbookBase(token);
   const base = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
 
@@ -559,6 +623,9 @@ async function diagnose() {
     result.constructedContentPath = `ERROR: ${e.message}`;
   }
 
+  // Step 0: token permissions (decode JWT roles)
+  result.permissions = await getTokenPermissions();
+
   // Step 1: token
   try {
     await getAccessToken();
@@ -664,7 +731,33 @@ async function diagnose() {
     result.steps.download = `FAIL: ${e.message}`;
   }
 
+  // Step 6: Workbook API probe (sessionless, item-ID URL) — tests WAC access
+  try {
+    const token = await getAccessToken();
+    const workbookBase = await resolveWorkbookBase(token);
+    result.steps.workbookBaseUrl = workbookBase;
+    const resp = await axios.get(
+      graphUrl(`${workbookBase}/worksheets`),
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const names = (resp.data.value || []).map((w) => w.name);
+    result.steps.workbookApi = `OK – hojas: ${names.join(', ')}`;
+  } catch (e) {
+    const status = e.response && e.response.status;
+    const msg = e.response && e.response.data && e.response.data.error
+      ? `${status} ${e.response.data.error.code}: ${e.response.data.error.message}`
+      : `${status || '?'} ${e.message}`;
+    result.steps.workbookApi = `FAIL – ${msg}`;
+    if (status === 403) {
+      result.steps.workbookApiFix =
+        'Añade el permiso "Sites.ReadWrite.All" (Application) en Azure AD → ' +
+        'Azure Portal → App registrations → tu app → API permissions → ' +
+        'Add a permission → Microsoft Graph → Application permissions → ' +
+        'Sites.ReadWrite.All → Grant admin consent';
+    }
+  }
+
   return result;
 }
 
-module.exports = { getReferencias, addReferencia, diagnose };
+module.exports = { getReferencias, addReferencia, diagnose, getTokenPermissions };
