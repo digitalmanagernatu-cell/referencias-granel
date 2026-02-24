@@ -372,7 +372,7 @@ async function appendRowViaWorkbookSession(rowValues, nombreProducto) {
     const nextRow = DATA_START_ROW + lastFilledIdx + 1; // 1-based
 
     // ── 3. Write new row (retry on transient lock) ────────────────────────────
-    const lastCol = String.fromCharCode(64 + COLUMNS.length); // 'P' for 16 cols
+    const lastCol = String.fromCharCode(64 + COLUMNS.length); // 'Q' for 17 cols
     const address = `A${nextRow}:${lastCol}${nextRow}`;
     await withRetry(
       () => axios.patch(
