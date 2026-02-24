@@ -1,3 +1,4 @@
+import logoImg from '../assets/logo.png';
 import './Header.css';
 
 export default function Header({ onSolicitar }) {
@@ -6,12 +7,7 @@ export default function Header({ onSolicitar }) {
       <div className="header-inner">
         <div className="header-brand">
           <div className="header-logo" aria-hidden="true">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="32" height="32" rx="8" fill="#1b4332" />
-              <path d="M8 22C8 22 10 14 16 14C22 14 24 22 24 22" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
-              <circle cx="16" cy="11" r="3" fill="#52b788" />
-              <path d="M13 22C13 22 14 18 16 18C18 18 19 22 19 22" stroke="#52b788" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
+            <img src={logoImg} alt="" width="40" height="40" style={{ borderRadius: '8px', objectFit: 'contain' }} />
           </div>
           <div>
             <h1 className="header-title">Nuevas Referencias Granel</h1>
