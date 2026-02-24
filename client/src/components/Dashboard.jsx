@@ -87,24 +87,28 @@ function ChartCard({ title, slices }) {
 export default function Dashboard({ referencias }) {
   const total = referencias.length;
 
-  // KPI counts by estado
-  const aprobadas = referencias.filter(
-    (r) => (r.estado || '').trim().toUpperCase() === 'APROBADO'
-  ).length;
-  const evaluando = referencias.filter((r) => {
+  // KPI counts by estado (case-insensitive)
+  const KNOWN_ESTADOS = ['APROBADO', 'EVALUANDO', 'TESTANDO', 'PENDIENTE'];
+  function countEstado(val) {
+    return referencias.filter(
+      (r) => (r.estado || '').trim().toUpperCase() === val
+    ).length;
+  }
+  const aprobadas  = countEstado('APROBADO');
+  const evaluando  = countEstado('EVALUANDO');
+  const testando   = countEstado('TESTANDO');
+  const pendiente  = countEstado('PENDIENTE');
+  const sinEstado  = referencias.filter((r) => {
     const e = (r.estado || '').trim().toUpperCase();
-    return e === 'EVALUACIÓN' || e === 'EVALUACION';
+    return !e || !KNOWN_ESTADOS.includes(e);
   }).length;
-  const testando = referencias.filter(
-    (r) => (r.estado || '').trim().toUpperCase() === 'TESTANDO'
-  ).length;
-  const sinEstado = referencias.filter((r) => !(r.estado || '').trim()).length;
 
   // Slices for estado chart
   const estadoSlices = [
     { label: 'Aprobado',   value: aprobadas, color: '#16a34a' },
     { label: 'Evaluando',  value: evaluando, color: '#ea580c' },
     { label: 'Testando',   value: testando,  color: '#2563eb' },
+    { label: 'Pendiente',  value: pendiente, color: '#d97706' },
     { label: 'Sin estado', value: sinEstado, color: '#94a3b8' },
   ].filter((s) => s.value > 0);
 
@@ -136,9 +140,9 @@ export default function Dashboard({ referencias }) {
           <span className="kpi-label">Total solicitudes</span>
           <span className="kpi-value">{total}</span>
         </div>
-        <div className="kpi-card kpi-aprobado">
-          <span className="kpi-label">Aprobadas</span>
-          <span className="kpi-value">{aprobadas}</span>
+        <div className="kpi-card kpi-pendiente">
+          <span className="kpi-label">Pendientes</span>
+          <span className="kpi-value">{pendiente}</span>
         </div>
         <div className="kpi-card kpi-evaluando">
           <span className="kpi-label">Evaluando</span>
@@ -147,6 +151,10 @@ export default function Dashboard({ referencias }) {
         <div className="kpi-card kpi-testando">
           <span className="kpi-label">Testando</span>
           <span className="kpi-value">{testando}</span>
+        </div>
+        <div className="kpi-card kpi-aprobado">
+          <span className="kpi-label">Aprobadas</span>
+          <span className="kpi-value">{aprobadas}</span>
         </div>
       </div>
 

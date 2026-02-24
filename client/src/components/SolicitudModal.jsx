@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import './SolicitudModal.css';
 
-const COMERCIALES = ['Toni', 'Mauro', 'Jaime', 'Internacional', 'España e Italia', 'España'];
+const COMERCIALES = ['Toni', 'Mauro', 'Jaime'];
 const TIPOS = ['Normal', 'Nicho', 'Selecto', 'Body Mist', 'Exclusiva'];
 const TIPO_FRAGANCIA = ['Femenino', 'Masculino', 'Unisex'];
 const CATEGORIAS = ['Perfumería', 'Ambientación'];
