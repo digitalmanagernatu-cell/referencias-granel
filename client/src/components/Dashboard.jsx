@@ -1,5 +1,13 @@
 import './Dashboard.css';
 
+// Strip gender suffixes (HOMBRE / MUJER / UNISEX) to group chart slices.
+// "NORMAL MUJER" → "NORMAL", "NICHO UNISEX" → "NICHO", etc.
+const GENDER_SUFFIXES = /\s+(HOMBRE|MUJER|UNISEX)$/i;
+function groupTipo(tipo) {
+  if (!tipo) return 'Sin tipo';
+  return tipo.trim().replace(GENDER_SUFFIXES, '').trim() || tipo.trim();
+}
+
 // Color palette for dynamic categories / tipos
 const PALETTE = [
   '#1b4332', '#40916c', '#74c69d', '#7c3aed', '#db2777',
@@ -110,10 +118,10 @@ export default function Dashboard({ referencias }) {
     .sort((a, b) => b[1] - a[1])
     .map(([label, value], i) => ({ label, value, color: getColor(i) }));
 
-  // Slices for tipo de producto
+  // Slices for tipo de producto — grouped by base type (strips gender suffix)
   const tipoMap = {};
   referencias.forEach((r) => {
-    const t = (r.tipoProducto || '').trim() || 'Sin tipo';
+    const t = groupTipo(r.tipoProducto);
     tipoMap[t] = (tipoMap[t] || 0) + 1;
   });
   const tipoSlices = Object.entries(tipoMap)
