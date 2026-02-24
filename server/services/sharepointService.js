@@ -263,51 +263,79 @@ function getWorkbookBase() {
 }
 
 /**
- * Appends a row directly via the Graph workbook session API.
- * This works even when the file is open in Excel or Excel Online,
- * because it writes through the same Excel service layer.
+ * Appends a row directly via the Graph workbook API.
+ *
+ * Strategy:
+ *  1. Try to open a persistent workbook session (best for atomicity).
+ *  2. If the session creation returns 423 (file open in Excel Online),
+ *     proceed WITHOUT a session ID — Microsoft allows sessionless workbook
+ *     writes that go through the same Excel service and merge safely.
+ *  3. Find the actual last data row by scanning column E (nombreProducto)
+ *     starting from DATA_START_ROW, so formatting/empty rows are ignored.
  */
 async function appendRowViaWorkbookSession(rowValues) {
   const token = await getAccessToken();
   const workbookBase = getWorkbookBase();
-  const auth = { Authorization: `Bearer ${token}` };
+  const baseHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
 
-  // Open a persistent workbook session
-  const sessionRes = await axios.post(
-    graphUrl(`${workbookBase}/createSession`),
-    { persistChanges: true },
-    { headers: { ...auth, 'Content-Type': 'application/json' } }
-  );
-  const sessionId = sessionRes.data.id;
-  const sessionHeaders = { ...auth, 'workbook-session-id': sessionId, 'Content-Type': 'application/json' };
+  // ── Step 1: try to create a persistent session ──────────────────────────
+  let sessionId = null;
+  try {
+    const sessionRes = await axios.post(
+      graphUrl(`${workbookBase}/createSession`),
+      { persistChanges: true },
+      { headers: baseHeaders }
+    );
+    sessionId = sessionRes.data.id;
+  } catch (sessionErr) {
+    const status = sessionErr.response && sessionErr.response.status;
+    if (status === 423) {
+      // File is open in Excel Online — fall through to sessionless writes
+      console.warn('[appendRowViaWorkbookSession] Archivo abierto (423), usando escritura sin sesión');
+    } else {
+      throw sessionErr; // unexpected auth/config error — propagate
+    }
+  }
+
+  const reqHeaders = sessionId
+    ? { ...baseHeaders, 'workbook-session-id': sessionId }
+    : baseHeaders;
 
   async function closeSession() {
+    if (!sessionId) return;
     try {
       await axios.post(
         graphUrl(`${workbookBase}/closeSession`),
         {},
-        { headers: { ...auth, 'workbook-session-id': sessionId } }
+        { headers: reqHeaders }
       );
     } catch (_) { /* best-effort */ }
   }
 
   try {
-    // Find the last used row in the sheet
-    const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
-    const usedRangeRes = await axios.get(
-      graphUrl(`${sheetBase}/usedRange(valuesOnly=true)`),
-      { headers: sessionHeaders }
+    // ── Step 2: find the actual last data row via column E scan ────────────
+    // Search DATA_START_ROW … DATA_START_ROW+500 in column E (nombreProducto).
+    // This correctly skips header rows and formatting-only empty rows.
+    const searchRange = `E${DATA_START_ROW}:E${DATA_START_ROW + 500}`;
+    const colERes = await axios.get(
+      graphUrl(`${sheetBase}/range(address='${searchRange}')`),
+      { headers: reqHeaders }
     );
-    const { rowIndex, rowCount } = usedRangeRes.data;
-    const nextRow = rowIndex + rowCount + 1; // 1-based row number
+    const eValues = colERes.data.values; // [[val], [val], ...]
+    let lastFilledIdx = -1;
+    for (let i = 0; i < eValues.length; i++) {
+      if (eValues[i][0] && String(eValues[i][0]).trim()) lastFilledIdx = i;
+    }
+    const nextRow = DATA_START_ROW + lastFilledIdx + 1; // 1-based row number
 
-    // Write the new row (A-P = 16 columns)
+    // ── Step 3: write the new row ──────────────────────────────────────────
     const lastCol = String.fromCharCode(64 + COLUMNS.length); // 'P'
     const address = `A${nextRow}:${lastCol}${nextRow}`;
     await axios.patch(
       graphUrl(`${sheetBase}/range(address='${address}')`),
       { values: [rowValues] },
-      { headers: sessionHeaders }
+      { headers: reqHeaders }
     );
 
     await closeSession();
@@ -322,15 +350,18 @@ async function appendRowViaWorkbookSession(rowValues) {
  * POST a new referencia row to the Excel.
  * Primary: workbook session API — works even when the file is open.
  * Fallback: download → modify locally → re-upload (requires file to be free).
+ * New solicitudes always get estado = 'PENDIENTE'.
  * @param {Object} data - fields matching the COLUMNS mapping
  */
 async function addReferencia(data) {
-  const rowValues = objectToRow(data);
+  // Enforce default estado for new solicitudes
+  const dataWithDefaults = { ...data, estado: data.estado || 'PENDIENTE' };
+  const rowValues = objectToRow(dataWithDefaults);
 
   // Primary path: workbook session API handles concurrent access
   try {
     const sheetRow = await appendRowViaWorkbookSession(rowValues);
-    return { sheetRow, ...data };
+    return { sheetRow, ...dataWithDefaults };
   } catch (workbookErr) {
     const status = workbookErr.response && workbookErr.response.status;
     // Fall back only when the workbook API is auth/permission blocked.
@@ -358,7 +389,16 @@ async function addReferencia(data) {
   const buffer = await downloadExcel();
   const { workbook, sheet, allValues } = parseSheet(buffer);
 
-  const nextRowIdx = allValues.length; // 0-based index for the new row
+  // Find the actual last data row by scanning column E (nombreProducto)
+  // starting from DATA_START_ROW, so header rows and empty/formatting rows
+  // beyond the data area are not counted.
+  const nombreProductoIdx = COLUMNS.indexOf('nombreProducto'); // 4 → col E
+  let lastDataRowIdx = DATA_START_ROW - 2; // 0-based, just before data area
+  for (let i = DATA_START_ROW - 1; i < allValues.length; i++) {
+    if (allValues[i] && allValues[i][nombreProductoIdx]) lastDataRowIdx = i;
+  }
+  const nextRowIdx = lastDataRowIdx + 1; // 0-based index for the new row
+
   COLUMNS.forEach((_col, colIdx) => {
     const cellRef = XLSX.utils.encode_cell({ r: nextRowIdx, c: colIdx });
     sheet[cellRef] = { v: rowValues[colIdx], t: 's' };
@@ -372,7 +412,7 @@ async function addReferencia(data) {
   const newBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
   await uploadExcel(newBuffer);
 
-  return { sheetRow: nextRowIdx + 1, ...data };
+  return { sheetRow: nextRowIdx + 1, ...dataWithDefaults };
 }
 
 /**

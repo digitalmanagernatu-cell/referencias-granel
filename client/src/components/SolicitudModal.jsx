@@ -6,12 +6,18 @@ const COMERCIALES = ['Toni', 'Mauro', 'Jaime', 'Internacional', 'España e Itali
 const TIPOS = ['Normal', 'Nicho', 'Selecto', 'Body Mist', 'Exclusiva'];
 const CATEGORIAS = ['Perfumería', 'Ambientación'];
 
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
 const INITIAL_FORM = {
   nombreComercial: '',
   nombreComercialCustom: '',
   nombreProducto: '',
   tipoProducto: '',
   categoria: '',
+  peticionFechaLanzamiento: '',
   enlaces: '',
   nombreCliente: '',
 };
@@ -68,6 +74,7 @@ export default function SolicitudModal({ onClose, onSuccess }) {
         nombreProducto: form.nombreProducto.trim(),
         tipoProducto: form.tipoProducto,
         categoria: form.categoria,
+        peticionFechaLanzamiento: form.peticionFechaLanzamiento.trim(),
         enlaces: form.enlaces.trim(),
         nombreCliente: isExclusiva ? form.nombreCliente.trim() : '',
       };
@@ -194,6 +201,23 @@ export default function SolicitudModal({ onClose, onSuccess }) {
                   {CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
                 {errors.categoria && <span className="form-error">{errors.categoria}</span>}
+              </div>
+
+              {/* Mes de lanzamiento */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="s-mes-lanzamiento">
+                  Mes de lanzamiento <span className="optional">(opcional)</span>
+                </label>
+                <select
+                  id="s-mes-lanzamiento"
+                  className="form-control"
+                  value={form.peticionFechaLanzamiento}
+                  onChange={(e) => update('peticionFechaLanzamiento', e.target.value)}
+                  disabled={submitting}
+                >
+                  <option value="">Selecciona un mes...</option>
+                  {MESES.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
               </div>
 
               {/* Enlace a Fragrantica */}
