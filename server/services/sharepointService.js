@@ -134,18 +134,51 @@ async function downloadExcel() {
   } catch (err) { handleAxiosError(err); }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function uploadExcel(buffer) {
   const token = await getAccessToken();
-  try {
-    await axios.put(graphUrl(getFileContentPath()), buffer, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      },
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-    });
-  } catch (err) { handleAxiosError(err); }
+  const url = graphUrl(getFileContentPath());
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+
+  // Retry up to 3 times on 423 (file locked) with exponential backoff: 3s, 6s, 12s
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await axios.put(url, buffer, {
+        headers,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      });
+      return; // success
+    } catch (err) {
+      const status = err.response && err.response.status;
+      const isLocked = status === 423;
+      const isLastAttempt = attempt === MAX_RETRIES;
+
+      if (isLocked && !isLastAttempt) {
+        console.warn(`[uploadExcel] Archivo bloqueado (423), reintento ${attempt}/${MAX_RETRIES - 1}...`);
+        await sleep(3000 * attempt); // 3s, 6s
+        continue;
+      }
+
+      if (isLocked) {
+        const e = new Error(
+          'El archivo Excel está siendo utilizado por otro usuario en este momento. ' +
+          'Cierra el archivo en Excel/SharePoint y vuelve a intentarlo en unos segundos.'
+        );
+        e.status = 423;
+        throw e;
+      }
+
+      handleAxiosError(err);
+    }
+  }
 }
 
 // ─── XLSX parsing ──────────────────────────────────────────────────────────
@@ -221,25 +254,116 @@ async function getReferencias() {
     .filter((r) => !isRowEmpty(r));
 }
 
+// ─── Workbook session API (write while file is open) ───────────────────────
+
+function getWorkbookBase() {
+  if (FILE_ID) return `/sites/${SITE_ID}/drive/items/${FILE_ID}/workbook`;
+  if (DRIVE_ID) return `/sites/${SITE_ID}/drives/${DRIVE_ID}/root:${encodePath(FILE_PATH)}:/workbook`;
+  return `/sites/${SITE_ID}/drive/root:${encodePath(FILE_PATH)}:/workbook`;
+}
+
+/**
+ * Appends a row directly via the Graph workbook session API.
+ * This works even when the file is open in Excel or Excel Online,
+ * because it writes through the same Excel service layer.
+ */
+async function appendRowViaWorkbookSession(rowValues) {
+  const token = await getAccessToken();
+  const workbookBase = getWorkbookBase();
+  const auth = { Authorization: `Bearer ${token}` };
+
+  // Open a persistent workbook session
+  const sessionRes = await axios.post(
+    graphUrl(`${workbookBase}/createSession`),
+    { persistChanges: true },
+    { headers: { ...auth, 'Content-Type': 'application/json' } }
+  );
+  const sessionId = sessionRes.data.id;
+  const sessionHeaders = { ...auth, 'workbook-session-id': sessionId, 'Content-Type': 'application/json' };
+
+  async function closeSession() {
+    try {
+      await axios.post(
+        graphUrl(`${workbookBase}/closeSession`),
+        {},
+        { headers: { ...auth, 'workbook-session-id': sessionId } }
+      );
+    } catch (_) { /* best-effort */ }
+  }
+
+  try {
+    // Find the last used row in the sheet
+    const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
+    const usedRangeRes = await axios.get(
+      graphUrl(`${sheetBase}/usedRange(valuesOnly=true)`),
+      { headers: sessionHeaders }
+    );
+    const { rowIndex, rowCount } = usedRangeRes.data;
+    const nextRow = rowIndex + rowCount + 1; // 1-based row number
+
+    // Write the new row (A-P = 16 columns)
+    const lastCol = String.fromCharCode(64 + COLUMNS.length); // 'P'
+    const address = `A${nextRow}:${lastCol}${nextRow}`;
+    await axios.patch(
+      graphUrl(`${sheetBase}/range(address='${address}')`),
+      { values: [rowValues] },
+      { headers: sessionHeaders }
+    );
+
+    await closeSession();
+    return nextRow;
+  } catch (err) {
+    await closeSession();
+    throw err;
+  }
+}
+
 /**
  * POST a new referencia row to the Excel.
- * Downloads, appends the row, re-uploads — no WAC required.
+ * Primary: workbook session API — works even when the file is open.
+ * Fallback: download → modify locally → re-upload (requires file to be free).
  * @param {Object} data - fields matching the COLUMNS mapping
  */
 async function addReferencia(data) {
+  const rowValues = objectToRow(data);
+
+  // Primary path: workbook session API handles concurrent access
+  try {
+    const sheetRow = await appendRowViaWorkbookSession(rowValues);
+    return { sheetRow, ...data };
+  } catch (workbookErr) {
+    const status = workbookErr.response && workbookErr.response.status;
+    // Fall back only when the workbook API is auth/permission blocked.
+    // For all other errors (sheet not found, bad data, etc.) propagate.
+    const shouldFallback = status === 401 || status === 403 || status === 501;
+    if (!shouldFallback) {
+      // Rethrow with a clearer message if it's still a 423
+      if (status === 423) {
+        const e = new Error(
+          'El archivo Excel está siendo utilizado por otro usuario en este momento. ' +
+          'Cierra el archivo en Excel/SharePoint y vuelve a intentarlo en unos segundos.'
+        );
+        e.status = 423;
+        throw e;
+      }
+      throw workbookErr;
+    }
+    console.warn(
+      '[addReferencia] Workbook session no disponible (status %d), usando descarga/subida como alternativa',
+      status
+    );
+  }
+
+  // Fallback: download the binary, append the row locally, re-upload
   const buffer = await downloadExcel();
   const { workbook, sheet, allValues } = parseSheet(buffer);
 
-  // Next empty row: 0-based index = current total used rows
-  const nextRowIdx = allValues.length;
-  const rowValues = objectToRow(data);
-
+  const nextRowIdx = allValues.length; // 0-based index for the new row
   COLUMNS.forEach((_col, colIdx) => {
     const cellRef = XLSX.utils.encode_cell({ r: nextRowIdx, c: colIdx });
     sheet[cellRef] = { v: rowValues[colIdx], t: 's' };
   });
 
-  // Expand the sheet's declared range to include the new row
   const ref = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
   ref.e.r = Math.max(ref.e.r, nextRowIdx);
   ref.e.c = Math.max(ref.e.c, COLUMNS.length - 1);
@@ -248,7 +372,7 @@ async function addReferencia(data) {
   const newBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
   await uploadExcel(newBuffer);
 
-  return { sheetRow: nextRowIdx + 1, ...data }; // 1-based row number
+  return { sheetRow: nextRowIdx + 1, ...data };
 }
 
 /**
