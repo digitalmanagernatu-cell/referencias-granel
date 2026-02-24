@@ -93,9 +93,9 @@ export default function App() {
       <Header onSolicitar={() => setSolicitudOpen(true)} />
 
       <main className="main">
-        {/* Dashboard: KPI cards + pie charts — always shows totals over all data */}
+        {/* Dashboard: KPI cards + pie charts — reflect active filters */}
         {!loading && !error && referencias.length > 0 && (
-          <Dashboard referencias={referencias} />
+          <Dashboard referencias={filtered} />
         )}
 
         <FilterBar

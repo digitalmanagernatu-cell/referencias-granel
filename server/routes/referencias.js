@@ -43,8 +43,8 @@ router.post('/', async (req, res, next) => {
       });
     }
 
-    // If tipo is Exclusiva, nombreCliente is required
-    if (tipoProducto === 'Exclusiva' && !nombreCliente) {
+    // If tipo is Exclusiva, nombreCliente is required (form sends uppercase EXCLUSIVA)
+    if ((tipoProducto || '').toUpperCase() === 'EXCLUSIVA' && !nombreCliente) {
       return res.status(400).json({
         success: false,
         error: 'Para tipo Exclusiva, el nombre del cliente es obligatorio',

@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import './SolicitudModal.css';
 
-const COMERCIALES = ['Toni', 'Mauro', 'Jaime'];
-const TIPOS = ['Normal', 'Nicho', 'Selecto', 'Body Mist', 'Exclusiva'];
-const TIPO_FRAGANCIA = ['Femenino', 'Masculino', 'Unisex'];
-const CATEGORIAS = ['Perfumería', 'Ambientación'];
+const COMERCIALES = ['TONI', 'MAURO', 'JAIME'];
+const TIPOS = ['NORMAL', 'NICHO', 'SELECTO', 'BODY MIST', 'EXCLUSIVA'];
+const TIPO_FRAGANCIA = ['FEMENINO', 'MASCULINO', 'UNISEX'];
+const CATEGORIAS = ['PERFUMERÍA', 'AMBIENTACIÓN'];
 
 const INITIAL_FORM = {
   nombreComercial: '',
@@ -25,7 +25,7 @@ export default function SolicitudModal({ onClose, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
 
   const isOtroComercial = form.nombreComercial === 'otro';
-  const isExclusiva = form.tipoProducto === 'Exclusiva';
+  const isExclusiva = form.tipoProducto === 'EXCLUSIVA';
 
   // Close on Escape
   useEffect(() => {
@@ -44,7 +44,7 @@ export default function SolicitudModal({ onClose, onSuccess }) {
     const comercialFinal = isOtroComercial ? form.nombreComercialCustom.trim() : form.nombreComercial;
     if (!comercialFinal) newErrors.nombreComercial = 'El nombre del comercial es obligatorio';
     if (!form.nombreProducto.trim()) newErrors.nombreProducto = 'El nombre de la fragancia es obligatorio';
-    if (!form.tipoProducto) newErrors.tipoProducto = 'Selecciona un tipo de fragancia';
+    if (!form.tipoProducto) newErrors.tipoProducto = 'Selecciona un tipo de producto';
     if (!form.tipoFragancia) newErrors.tipoFragancia = 'Selecciona el género de la fragancia';
     if (!form.categoria) newErrors.categoria = 'Selecciona una categoría';
     if (isExclusiva && !form.nombreCliente.trim()) {
@@ -170,10 +170,10 @@ export default function SolicitudModal({ onClose, onSuccess }) {
                 {errors.nombreProducto && <span className="form-error">{errors.nombreProducto}</span>}
               </div>
 
-              {/* Tipo de fragancia */}
+              {/* Tipo de producto */}
               <div className="form-group">
                 <label className="form-label" htmlFor="s-tipo">
-                  Tipo de fragancia <span className="required">*</span>
+                  Tipo de producto <span className="required">*</span>
                 </label>
                 <select
                   id="s-tipo"
