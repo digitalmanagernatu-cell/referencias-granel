@@ -1,6 +1,7 @@
 const { ConfidentialClientApplication } = require('@azure/msal-node');
 const axios = require('axios');
 const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 
 const TENANT_ID = process.env.TENANT_ID;
 const CLIENT_ID = process.env.CLIENT_ID;
@@ -216,12 +217,43 @@ function normalizeTipo(raw) {
   return TIPO_NORMALIZACION[upper] || raw.trim();
 }
 
+// Date columns that may come from Excel in M/D/YY (US) format
+const DATE_COLUMNS = new Set([
+  'fechaSolicitudComercial', 'fechaSolicitudProveedor',
+  'fechaLlegadaPropuesta', 'fechaValidacionNatu',
+]);
+
+/**
+ * Converts M/D/YY or M/D/YYYY → DD/MM/YYYY.
+ * If the value is already DD/MM/YYYY (first segment > 12) it is left alone.
+ * Non-date strings are returned unchanged.
+ */
+function fixDateFormat(val) {
+  if (!val) return val;
+  const m = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return val;
+  const p1 = parseInt(m[1], 10);
+  const p2 = parseInt(m[2], 10);
+  const rawYear = m[3];
+  const year = rawYear.length === 2
+    ? (parseInt(rawYear, 10) < 50 ? `20${rawYear}` : `19${rawYear}`)
+    : rawYear;
+  // If second segment > 12 it must be the day → US M/D/YY format
+  // If first segment > 12 it must be the day → already DD/MM
+  let day, month;
+  if (p2 > 12) { day = p2; month = p1; }        // M/D/YY
+  else if (p1 > 12) { day = p1; month = p2; }   // already DD/MM
+  else { month = p1; day = p2; }                 // ambiguous: assume M/D (US)
+  return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+}
+
 // ─── Conversion helpers ────────────────────────────────────────────────────
 function rowToObject(row, sheetRowNumber) {
   const obj = { _sheetRow: sheetRowNumber };
   COLUMNS.forEach((col, i) => {
     let val = row[i] !== undefined && row[i] !== null ? String(row[i]).trim() : '';
     if (col === 'tipoProducto') val = normalizeTipo(val);
+    if (DATE_COLUMNS.has(col)) val = fixDateFormat(val);
     obj[col] = val;
   });
   return obj;
@@ -394,10 +426,54 @@ async function appendRowViaWorkbookSession(rowValues, nombreProducto) {
 }
 
 /**
- * POST a new referencia row to the Excel via the Graph Workbook API.
+ * Binary fallback: download → add row with ExcelJS (preserves all cell
+ * formatting) → re-upload.  Only reached when the Workbook/WAC API is
+ * blocked by Azure permissions.
  *
- * Never falls back to binary download+upload — that path strips Excel
- * formatting (cell colours, borders, number formats).
+ * @param {string[]} rowValues  Array of cell values (COLUMNS order)
+ * @param {string}   nombreProducto  For duplicate detection
+ */
+async function addRowWithExceljs(rowValues, nombreProducto) {
+  const buffer = await downloadExcel();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+
+  const ws = wb.getWorksheet(SHEET_NAME);
+  if (!ws) throw new Error(`Hoja "${SHEET_NAME}" no encontrada`);
+
+  const npIdx = COLUMNS.indexOf('nombreProducto'); // 0-based
+  const newNameNorm = (nombreProducto || '').trim().toLowerCase();
+  let lastFilledRow = DATA_START_ROW - 1; // 1-based
+
+  for (let r = DATA_START_ROW; r <= ws.actualRowCount + 10; r++) {
+    const cell = ws.getCell(r, npIdx + 1); // ExcelJS is 1-based
+    const val = cell.value != null ? String(cell.value).trim() : '';
+    if (!val) continue;
+    if (val.toLowerCase() === newNameNorm) {
+      const dup = new Error(`La referencia "${nombreProducto}" ya está solicitada (fila ${r})`);
+      dup.code = 'DUPLICATE';
+      throw dup;
+    }
+    lastFilledRow = r;
+  }
+
+  const nextRow = lastFilledRow + 1;
+  rowValues.forEach((val, colIdx) => {
+    ws.getCell(nextRow, colIdx + 1).value = val || null;
+  });
+
+  const newBuffer = await wb.xlsx.writeBuffer();
+  await uploadExcel(Buffer.from(newBuffer));
+  return nextRow;
+}
+
+/**
+ * POST a new referencia row to the Excel.
+ *
+ * Primary path: Workbook API (works even when file is open, no formatting loss).
+ * Fallback for WAC/permission errors (403): binary download+ExcelJS write+upload
+ *   — ExcelJS preserves all cell formatting unlike xlsx.js.
+ *   — Only works when the file is NOT open in Excel Online (PUT returns 423 if open).
  * New solicitudes always receive estado = 'PENDIENTE'.
  *
  * @param {Object} data  Fields matching the COLUMNS mapping
@@ -411,18 +487,45 @@ async function addReferencia(data) {
   const rowValues = objectToRow(dataWithDefaults);
   const nombreProducto = data.nombreProducto || '';
 
+  // ── Primary: Workbook API ─────────────────────────────────────────────────
   try {
     const sheetRow = await appendRowViaWorkbookSession(rowValues, nombreProducto);
     return { sheetRow, ...dataWithDefaults };
-  } catch (err) {
-    if (err.code === 'DUPLICATE') throw err;
-    const status = err.response && err.response.status;
-    const msg = err.response
-      ? `${status} – ${JSON.stringify(err.response.data)}`
-      : err.message;
-    const e = new Error(`No se pudo guardar en el Excel: ${msg}`);
-    e.status = status || 500;
-    throw e;
+  } catch (workbookErr) {
+    if (workbookErr.code === 'DUPLICATE') throw workbookErr;
+    const status = workbookErr.response && workbookErr.response.status;
+    // Only fall back to binary when it's a permissions/WAC issue (403/401).
+    // Any other error (sheet not found, network, etc.) is surfaced directly.
+    if (status !== 403 && status !== 401) {
+      const msg = workbookErr.response
+        ? `${status} – ${JSON.stringify(workbookErr.response.data)}`
+        : workbookErr.message;
+      const e = new Error(`No se pudo guardar en el Excel: ${msg}`);
+      e.status = status || 500;
+      throw e;
+    }
+    console.warn('[addReferencia] Workbook API bloqueada (%d WAC) – usando descarga+ExcelJS', status);
+  }
+
+  // ── Fallback: binary download → ExcelJS → re-upload ──────────────────────
+  // ExcelJS preserves all cell formatting (colours, borders, number formats).
+  // This path only works when the file is NOT open in Excel Online.
+  try {
+    const sheetRow = await addRowWithExceljs(rowValues, nombreProducto);
+    return { sheetRow, ...dataWithDefaults };
+  } catch (binErr) {
+    if (binErr.code === 'DUPLICATE') throw binErr;
+    const status = binErr.status || (binErr.response && binErr.response.status);
+    if (status === 423) {
+      const e = new Error(
+        'El archivo Excel está abierto en Excel Online. ' +
+        'Cierra el archivo o pide al administrador que configure los permisos ' +
+        'Sites.ReadWrite.All en Azure para permitir escritura simultánea.'
+      );
+      e.status = 423;
+      throw e;
+    }
+    throw binErr;
   }
 }
 
