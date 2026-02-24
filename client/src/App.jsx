@@ -55,8 +55,9 @@ export default function App() {
   }, [referencias]);
 
   // Filtered data for the table — all text comparisons are case-insensitive
+  // Sorted descending by date (most recent first); rows without date go last.
   const filtered = useMemo(() => {
-    return referencias.filter((r) => {
+    const result = referencias.filter((r) => {
       if (filters.comercial &&
         (r.nombreComercial || '').trim().toUpperCase() !== filters.comercial) return false;
       if (filters.tipoProducto &&
@@ -81,6 +82,16 @@ export default function App() {
       }
       return true;
     });
+    // Sort descending by date — rows with no date go to the end
+    result.sort((a, b) => {
+      const da = parseDate(a.fechaSolicitudComercial);
+      const db = parseDate(b.fechaSolicitudComercial);
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return db - da;
+    });
+    return result;
   }, [referencias, filters]);
 
   const clearFilters = () =>
