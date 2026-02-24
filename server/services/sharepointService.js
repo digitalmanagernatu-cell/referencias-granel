@@ -254,7 +254,7 @@ async function getReferencias() {
     .filter((r) => !isRowEmpty(r));
 }
 
-// ─── Workbook session API (write while file is open) ───────────────────────
+// ─── Workbook session API ───────────────────────────────────────────────────
 
 function getWorkbookBase() {
   if (FILE_ID) return `/sites/${SITE_ID}/drive/items/${FILE_ID}/workbook`;
@@ -263,79 +263,122 @@ function getWorkbookBase() {
 }
 
 /**
- * Appends a row directly via the Graph workbook API.
- *
- * Strategy:
- *  1. Try to open a persistent workbook session (best for atomicity).
- *  2. If the session creation returns 423 (file open in Excel Online),
- *     proceed WITHOUT a session ID — Microsoft allows sessionless workbook
- *     writes that go through the same Excel service and merge safely.
- *  3. Find the actual last data row by scanning column E (nombreProducto)
- *     starting from DATA_START_ROW, so formatting/empty rows are ignored.
+ * Retry a Graph API call on transient failures (423 locked, 429 rate-limit, 503).
+ * Uses exponential back-off: base * 2^(attempt-1) ms.
  */
-async function appendRowViaWorkbookSession(rowValues) {
+async function withRetry(fn, label, maxAttempts = 4, baseMs = 1000) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const status = err.response && err.response.status;
+      const retryable = status === 423 || status === 429 || status === 503;
+      if (retryable && attempt < maxAttempts) {
+        const delay = baseMs * Math.pow(2, attempt - 1);
+        console.warn(`[${label}] attempt ${attempt} failed (${status}), retry in ${delay}ms`);
+        await sleep(delay);
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+/**
+ * Appends a row to the Excel file via the Graph Workbook API.
+ *
+ * Design:
+ * - Tries to open a persistent session (best for write atomicity).
+ * - If createSession returns 423/locked, proceeds sessionless — Microsoft
+ *   creates a temporary auto-session per-request, which merges safely even
+ *   when another user has the file open in Excel Online.
+ * - Both createSession and the write PATCH are retried on transient errors
+ *   (423/429/503) with exponential back-off.
+ * - Last data row is located by scanning column E (nombreProducto) from
+ *   DATA_START_ROW, ignoring header rows and formatting-only empty rows.
+ * - Duplicate detection: throws {code:'DUPLICATE'} if the same product name
+ *   already exists in column E (case-insensitive).
+ *
+ * @param {string[]} rowValues  Array of cell values (must match COLUMNS length)
+ * @param {string}   nombreProducto  Used for duplicate detection
+ */
+async function appendRowViaWorkbookSession(rowValues, nombreProducto) {
   const token = await getAccessToken();
   const workbookBase = getWorkbookBase();
-  const baseHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const base = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
 
-  // ── Step 1: try to create a persistent session ──────────────────────────
+  // ── 1. Create persistent session (retry on transient lock) ────────────────
   let sessionId = null;
   try {
-    const sessionRes = await axios.post(
-      graphUrl(`${workbookBase}/createSession`),
-      { persistChanges: true },
-      { headers: baseHeaders }
+    const res = await withRetry(
+      () => axios.post(graphUrl(`${workbookBase}/createSession`), { persistChanges: true }, { headers: base }),
+      'createSession'
     );
-    sessionId = sessionRes.data.id;
-  } catch (sessionErr) {
-    const status = sessionErr.response && sessionErr.response.status;
+    sessionId = res.data.id;
+  } catch (err) {
+    const status = err.response && err.response.status;
     if (status === 423) {
-      // File is open in Excel Online — fall through to sessionless writes
-      console.warn('[appendRowViaWorkbookSession] Archivo abierto (423), usando escritura sin sesión');
+      // Persistent session unavailable — fall through to sessionless mode.
+      // Microsoft creates a temporary auto-session per-request; writes still
+      // land in the file even when another user's session is active.
+      console.warn('[appendRowViaWorkbookSession] createSession 423 – proceeding sessionless');
     } else {
-      throw sessionErr; // unexpected auth/config error — propagate
+      throw err;
     }
   }
 
   const reqHeaders = sessionId
-    ? { ...baseHeaders, 'workbook-session-id': sessionId }
-    : baseHeaders;
+    ? { ...base, 'workbook-session-id': sessionId }
+    : base;
 
   async function closeSession() {
     if (!sessionId) return;
-    try {
-      await axios.post(
-        graphUrl(`${workbookBase}/closeSession`),
-        {},
-        { headers: reqHeaders }
-      );
-    } catch (_) { /* best-effort */ }
+    try { await axios.post(graphUrl(`${workbookBase}/closeSession`), {}, { headers: reqHeaders }); }
+    catch (_) { /* best-effort */ }
   }
 
   try {
-    // ── Step 2: find the actual last data row via column E scan ────────────
-    // Search DATA_START_ROW … DATA_START_ROW+500 in column E (nombreProducto).
-    // This correctly skips header rows and formatting-only empty rows.
+    // ── 2. Scan column E to find last real data row + duplicate check ─────────
     const searchRange = `E${DATA_START_ROW}:E${DATA_START_ROW + 500}`;
-    const colERes = await axios.get(
-      graphUrl(`${sheetBase}/range(address='${searchRange}')`),
-      { headers: reqHeaders }
+    const colERes = await withRetry(
+      () => axios.get(graphUrl(`${sheetBase}/range(address='${searchRange}')`), { headers: reqHeaders }),
+      'readColE'
     );
-    const eValues = colERes.data.values; // [[val], [val], ...]
-    let lastFilledIdx = -1;
-    for (let i = 0; i < eValues.length; i++) {
-      if (eValues[i][0] && String(eValues[i][0]).trim()) lastFilledIdx = i;
-    }
-    const nextRow = DATA_START_ROW + lastFilledIdx + 1; // 1-based row number
+    const eValues = colERes.data.values; // [[val], [val], …]
 
-    // ── Step 3: write the new row ──────────────────────────────────────────
-    const lastCol = String.fromCharCode(64 + COLUMNS.length); // 'P'
+    const newNameNorm = (nombreProducto || '').trim().toLowerCase();
+    let lastFilledIdx = -1;
+
+    for (let i = 0; i < eValues.length; i++) {
+      const cell = eValues[i][0];
+      if (!cell || !String(cell).trim()) continue;
+      const existing = String(cell).trim();
+      // Duplicate check (case-insensitive)
+      if (existing.toLowerCase() === newNameNorm) {
+        const dup = new Error(
+          `La referencia "${nombreProducto}" ya está solicitada (fila ${DATA_START_ROW + i})`
+        );
+        dup.code = 'DUPLICATE';
+        throw dup;
+      }
+      lastFilledIdx = i;
+    }
+
+    const nextRow = DATA_START_ROW + lastFilledIdx + 1; // 1-based
+
+    // ── 3. Write new row (retry on transient lock) ────────────────────────────
+    const lastCol = String.fromCharCode(64 + COLUMNS.length); // 'P' for 16 cols
     const address = `A${nextRow}:${lastCol}${nextRow}`;
-    await axios.patch(
-      graphUrl(`${sheetBase}/range(address='${address}')`),
-      { values: [rowValues] },
-      { headers: reqHeaders }
+    await withRetry(
+      () => axios.patch(
+        graphUrl(`${sheetBase}/range(address='${address}')`),
+        { values: [rowValues] },
+        { headers: reqHeaders }
+      ),
+      'writeRow',
+      4,   // max attempts
+      500  // shorter base (500ms, 1s, 2s, 4s)
     );
 
     await closeSession();
@@ -348,56 +391,70 @@ async function appendRowViaWorkbookSession(rowValues) {
 
 /**
  * POST a new referencia row to the Excel.
- * Primary: workbook session API — works even when the file is open.
- * Fallback: download → modify locally → re-upload (requires file to be free).
- * New solicitudes always get estado = 'PENDIENTE'.
- * @param {Object} data - fields matching the COLUMNS mapping
+ *
+ * Uses the Workbook API as primary path — does NOT replace the file binary,
+ * so it works even when another user has the file open in Excel/Excel Online.
+ * Server-side retries handle transient 423 / notAllowed locking errors.
+ *
+ * Auth-only fallback (403/401): falls back to download → modify → re-upload,
+ * which is only reached when the Workbook API is blocked by app permissions.
+ * New solicitudes always receive estado = 'PENDIENTE'.
+ *
+ * @param {Object} data  Fields matching the COLUMNS mapping
  */
 async function addReferencia(data) {
-  // Enforce default estado for new solicitudes
-  const dataWithDefaults = { ...data, estado: data.estado || 'PENDIENTE' };
+  const dataWithDefaults = {
+    ...data,
+    estado: data.estado || 'PENDIENTE',
+    peticionFechaLanzamiento: data.peticionFechaLanzamiento || 'NO INDICADO',
+  };
   const rowValues = objectToRow(dataWithDefaults);
+  const nombreProducto = data.nombreProducto || '';
 
-  // Primary path: workbook session API handles concurrent access
+  // ── Primary path: Workbook API (no binary replacement) ────────────────────
   try {
-    const sheetRow = await appendRowViaWorkbookSession(rowValues);
+    const sheetRow = await appendRowViaWorkbookSession(rowValues, nombreProducto);
     return { sheetRow, ...dataWithDefaults };
   } catch (workbookErr) {
+    if (workbookErr.code === 'DUPLICATE') throw workbookErr; // propagate as-is
+
     const status = workbookErr.response && workbookErr.response.status;
-    // Fall back only when the workbook API is auth/permission blocked.
-    // For all other errors (sheet not found, bad data, etc.) propagate.
-    const shouldFallback = status === 401 || status === 403 || status === 501;
-    if (!shouldFallback) {
-      // Rethrow with a clearer message if it's still a 423
-      if (status === 423) {
-        const e = new Error(
-          'El archivo Excel está siendo utilizado por otro usuario en este momento. ' +
-          'Cierra el archivo en Excel/SharePoint y vuelve a intentarlo en unos segundos.'
-        );
-        e.status = 423;
-        throw e;
-      }
-      throw workbookErr;
+    const isAuthBlock = status === 401 || status === 403;
+    if (!isAuthBlock) {
+      // Surface the real error (could be workbook API misconfigured, sheet not found, etc.)
+      const msg = workbookErr.response
+        ? `${workbookErr.response.status} – ${JSON.stringify(workbookErr.response.data)}`
+        : workbookErr.message;
+      const e = new Error(`No se pudo guardar en el Excel: ${msg}`);
+      e.status = status || 500;
+      throw e;
     }
-    console.warn(
-      '[addReferencia] Workbook session no disponible (status %d), usando descarga/subida como alternativa',
-      status
-    );
+    console.warn('[addReferencia] Workbook API bloqueada por permisos (%d), usando descarga/subida', status);
   }
 
-  // Fallback: download the binary, append the row locally, re-upload
+  // ── Auth fallback: download → parse → modify → upload ─────────────────────
+  // (only reached when app-only auth is blocked from using the Workbook API)
   const buffer = await downloadExcel();
   const { workbook, sheet, allValues } = parseSheet(buffer);
 
-  // Find the actual last data row by scanning column E (nombreProducto)
-  // starting from DATA_START_ROW, so header rows and empty/formatting rows
-  // beyond the data area are not counted.
-  const nombreProductoIdx = COLUMNS.indexOf('nombreProducto'); // 4 → col E
+  const nombreProductoIdx = COLUMNS.indexOf('nombreProducto'); // col E
   let lastDataRowIdx = DATA_START_ROW - 2; // 0-based, just before data area
+  const newNameNorm = nombreProducto.trim().toLowerCase();
+
   for (let i = DATA_START_ROW - 1; i < allValues.length; i++) {
-    if (allValues[i] && allValues[i][nombreProductoIdx]) lastDataRowIdx = i;
+    const existing = allValues[i] && allValues[i][nombreProductoIdx]
+      ? String(allValues[i][nombreProductoIdx]).trim()
+      : '';
+    if (!existing) continue;
+    if (existing.toLowerCase() === newNameNorm) {
+      const dup = new Error(`La referencia "${nombreProducto}" ya está solicitada`);
+      dup.code = 'DUPLICATE';
+      throw dup;
+    }
+    lastDataRowIdx = i;
   }
-  const nextRowIdx = lastDataRowIdx + 1; // 0-based index for the new row
+
+  const nextRowIdx = lastDataRowIdx + 1; // 0-based
 
   COLUMNS.forEach((_col, colIdx) => {
     const cellRef = XLSX.utils.encode_cell({ r: nextRowIdx, c: colIdx });

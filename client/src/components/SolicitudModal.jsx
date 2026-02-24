@@ -1,15 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import './SolicitudModal.css';
 
 const COMERCIALES = ['Toni', 'Mauro', 'Jaime', 'Internacional', 'España e Italia', 'España'];
 const TIPOS = ['Normal', 'Nicho', 'Selecto', 'Body Mist', 'Exclusiva'];
 const CATEGORIAS = ['Perfumería', 'Ambientación'];
-
-const MESES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
 
 const INITIAL_FORM = {
   nombreComercial: '',
@@ -22,33 +17,20 @@ const INITIAL_FORM = {
   nombreCliente: '',
 };
 
-const INITIAL_ERRORS = {};
-
-const MAX_RETRIES = 5;
-const RETRY_SECS = 15;
-
 export default function SolicitudModal({ onClose, onSuccess }) {
   const [form, setForm] = useState(INITIAL_FORM);
-  const [errors, setErrors] = useState(INITIAL_ERRORS);
+  const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
-  const [retryCountdown, setRetryCountdown] = useState(0); // > 0 = waiting to retry
-
-  const timerRef = useRef(null);
-  const pendingRef = useRef(null); // { payload, attempt }
 
   const isOtroComercial = form.nombreComercial === 'otro';
   const isExclusiva = form.tipoProducto === 'Exclusiva';
-  const isRetrying = retryCountdown > 0;
 
-  // Cleanup interval on unmount
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
-
-  // Close on Escape — blocked while retrying
+  // Close on Escape
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape' && !isRetrying) onClose(); };
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onClose, isRetrying]);
+  }, [onClose]);
 
   const update = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -72,81 +54,57 @@ export default function SolicitudModal({ onClose, onSuccess }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const stopRetry = () => {
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    setRetryCountdown(0);
-    pendingRef.current = null;
-  };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
 
-  const scheduleRetry = (payload, attempt) => {
-    pendingRef.current = { payload, attempt };
-    let secs = RETRY_SECS;
-    setRetryCountdown(secs);
-    timerRef.current = setInterval(() => {
-      secs--;
-      setRetryCountdown(secs);
-      if (secs <= 0) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-        setRetryCountdown(0);
-        doFetch(pendingRef.current.payload, pendingRef.current.attempt);
-      }
-    }, 1000);
-  };
-
-  const doFetch = async (payload, attempt) => {
     setSubmitting(true);
     try {
+      const payload = {
+        nombreComercial: isOtroComercial
+          ? form.nombreComercialCustom.trim()
+          : form.nombreComercial,
+        nombreProducto: form.nombreProducto.trim(),
+        tipoProducto: form.tipoProducto,
+        categoria: form.categoria,
+        // Empty → send 'NO INDICADO' so the Excel cell is never blank
+        peticionFechaLanzamiento: form.peticionFechaLanzamiento.trim() || 'NO INDICADO',
+        enlaces: form.enlaces.trim(),
+        nombreCliente: isExclusiva ? form.nombreCliente.trim() : '',
+      };
+
       const res = await fetch('/api/referencias', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+
       const json = await res.json();
+
       if (!res.ok) {
-        const err = new Error(json.error || `Error ${res.status}`);
-        err.httpStatus = res.status;
-        throw err;
+        if (res.status === 409) {
+          // Duplicate — surface as a field-level error so user sees it in context
+          setErrors({ nombreProducto: json.error || 'Esta referencia ya está solicitada' });
+          return;
+        }
+        throw new Error(json.error || `Error ${res.status}`);
       }
-      stopRetry();
+
       toast.success('Referencia añadida correctamente');
       onSuccess();
     } catch (err) {
-      if (err.httpStatus === 423 && attempt < MAX_RETRIES) {
-        scheduleRetry(payload, attempt + 1);
-      } else {
-        stopRetry();
-        toast.error(`Error al guardar: ${err.message}`);
-      }
+      toast.error(`Error al guardar: ${err.message}`);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!validate()) return;
-    stopRetry();
-    const payload = {
-      nombreComercial: isOtroComercial
-        ? form.nombreComercialCustom.trim()
-        : form.nombreComercial,
-      nombreProducto: form.nombreProducto.trim(),
-      tipoProducto: form.tipoProducto,
-      categoria: form.categoria,
-      peticionFechaLanzamiento: form.peticionFechaLanzamiento.trim(),
-      enlaces: form.enlaces.trim(),
-      nombreCliente: isExclusiva ? form.nombreCliente.trim() : '',
-    };
-    doFetch(payload, 0);
-  };
-
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && !isRetrying && onClose()}>
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal modal-solicitud" role="dialog" aria-modal="true" aria-labelledby="solicitud-title">
         <div className="modal-header">
           <h2 className="modal-title" id="solicitud-title">Solicitar nueva referencia</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar" disabled={submitting || isRetrying}>×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Cerrar" disabled={submitting}>×</button>
         </div>
 
         <form onSubmit={handleSubmit} noValidate>
@@ -244,21 +202,20 @@ export default function SolicitudModal({ onClose, onSuccess }) {
                 {errors.categoria && <span className="form-error">{errors.categoria}</span>}
               </div>
 
-              {/* Mes de lanzamiento */}
+              {/* Solicitud Fecha Lanzamiento */}
               <div className="form-group">
-                <label className="form-label" htmlFor="s-mes-lanzamiento">
-                  Mes de lanzamiento <span className="optional">(opcional)</span>
+                <label className="form-label" htmlFor="s-fecha-lanzamiento">
+                  Solicitud fecha lanzamiento <span className="optional">(opcional)</span>
                 </label>
-                <select
-                  id="s-mes-lanzamiento"
+                <input
+                  id="s-fecha-lanzamiento"
+                  type="text"
                   className="form-control"
+                  placeholder="Ej: Mayo 2026"
                   value={form.peticionFechaLanzamiento}
                   onChange={(e) => update('peticionFechaLanzamiento', e.target.value)}
                   disabled={submitting}
-                >
-                  <option value="">Selecciona un mes...</option>
-                  {MESES.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
+                />
               </div>
 
               {/* Enlace a Fragrantica */}
@@ -306,32 +263,19 @@ export default function SolicitudModal({ onClose, onSuccess }) {
             </div>
           </div>
 
-          {isRetrying && (
-            <div className="retry-notice">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              Archivo en uso. Reintentando en {retryCountdown}s…
-              (intento {pendingRef.current?.attempt ?? 0}/{MAX_RETRIES})
-              <button type="button" className="retry-cancel" onClick={stopRetry}>
-                Cancelar
-              </button>
-            </div>
-          )}
-
           <div className="modal-footer">
             <button
               type="button"
               className="btn btn-outline"
               onClick={onClose}
-              disabled={submitting || isRetrying}
+              disabled={submitting}
             >
               Cancelar
             </button>
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={submitting || isRetrying}
+              disabled={submitting}
             >
               {submitting ? (
                 <>
