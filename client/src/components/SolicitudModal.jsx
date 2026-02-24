@@ -4,6 +4,7 @@ import './SolicitudModal.css';
 
 const COMERCIALES = ['Toni', 'Mauro', 'Jaime', 'Internacional', 'España e Italia', 'España'];
 const TIPOS = ['Normal', 'Nicho', 'Selecto', 'Body Mist', 'Exclusiva'];
+const TIPO_FRAGANCIA = ['Femenino', 'Masculino', 'Unisex'];
 const CATEGORIAS = ['Perfumería', 'Ambientación'];
 
 const INITIAL_FORM = {
@@ -11,6 +12,7 @@ const INITIAL_FORM = {
   nombreComercialCustom: '',
   nombreProducto: '',
   tipoProducto: '',
+  tipoFragancia: '',
   categoria: '',
   peticionFechaLanzamiento: '',
   enlaces: '',
@@ -43,6 +45,7 @@ export default function SolicitudModal({ onClose, onSuccess }) {
     if (!comercialFinal) newErrors.nombreComercial = 'El nombre del comercial es obligatorio';
     if (!form.nombreProducto.trim()) newErrors.nombreProducto = 'El nombre de la fragancia es obligatorio';
     if (!form.tipoProducto) newErrors.tipoProducto = 'Selecciona un tipo de fragancia';
+    if (!form.tipoFragancia) newErrors.tipoFragancia = 'Selecciona el género de la fragancia';
     if (!form.categoria) newErrors.categoria = 'Selecciona una categoría';
     if (isExclusiva && !form.nombreCliente.trim()) {
       newErrors.nombreCliente = 'El nombre del cliente es obligatorio para tipo Exclusiva';
@@ -66,6 +69,7 @@ export default function SolicitudModal({ onClose, onSuccess }) {
           : form.nombreComercial,
         nombreProducto: form.nombreProducto.trim(),
         tipoProducto: form.tipoProducto,
+        tipoFragancia: form.tipoFragancia,
         categoria: form.categoria,
         // Empty → send 'NO INDICADO' so the Excel cell is never blank
         peticionFechaLanzamiento: form.peticionFechaLanzamiento.trim() || 'NO INDICADO',
@@ -182,6 +186,24 @@ export default function SolicitudModal({ onClose, onSuccess }) {
                   {TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
                 {errors.tipoProducto && <span className="form-error">{errors.tipoProducto}</span>}
+              </div>
+
+              {/* Tipo de fragancia (género) */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="s-tipo-fragancia">
+                  Tipo fragancia <span className="required">*</span>
+                </label>
+                <select
+                  id="s-tipo-fragancia"
+                  className={`form-control${errors.tipoFragancia ? ' error' : ''}`}
+                  value={form.tipoFragancia}
+                  onChange={(e) => update('tipoFragancia', e.target.value)}
+                  disabled={submitting}
+                >
+                  <option value="">Selecciona género...</option>
+                  {TIPO_FRAGANCIA.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+                {errors.tipoFragancia && <span className="form-error">{errors.tipoFragancia}</span>}
               </div>
 
               {/* Categoría */}

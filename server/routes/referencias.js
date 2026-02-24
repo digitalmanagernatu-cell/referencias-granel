@@ -18,15 +18,15 @@ router.get('/', async (req, res, next) => {
 // Añade una nueva referencia al Excel.
 // Body esperado (JSON):
 // {
-//   nombreComercial, tipoProducto, categoria, nombreProducto,
-//   nombreCliente?, peticionFechaLanzamiento?, proveedor?,
-//   enlaces?
+//   nombreComercial, tipoProducto, tipoFragancia, categoria, nombreProducto,
+//   nombreCliente?, peticionFechaLanzamiento?, proveedor?, enlaces?
 // }
 router.post('/', async (req, res, next) => {
   try {
     const {
       nombreComercial,
       tipoProducto,
+      tipoFragancia,
       categoria,
       nombreProducto,
       nombreCliente = '',
@@ -36,10 +36,10 @@ router.post('/', async (req, res, next) => {
     } = req.body;
 
     // Validate required fields
-    if (!nombreComercial || !tipoProducto || !categoria || !nombreProducto) {
+    if (!nombreComercial || !tipoProducto || !tipoFragancia || !categoria || !nombreProducto) {
       return res.status(400).json({
         success: false,
-        error: 'Faltan campos obligatorios: nombreComercial, tipoProducto, categoria, nombreProducto',
+        error: 'Faltan campos obligatorios: nombreComercial, tipoProducto, tipoFragancia, categoria, nombreProducto',
       });
     }
 
@@ -61,19 +61,20 @@ router.post('/', async (req, res, next) => {
       numero: '',                      // A - Asignado por Natu
       nombreComercial,                 // B
       tipoProducto,                    // C
-      categoria,                       // D
-      nombreProducto,                  // E
-      nRefAsignado: '',                // F - Asignado por Natu
-      nombreCliente,                   // G
-      peticionFechaLanzamiento,        // H
-      fechaSolicitudComercial: today,  // I - Fecha actual
-      proveedor,                       // J
-      fechaSolicitudProveedor: '',     // K
-      fechaLlegadaPropuesta: '',       // L
-      estado: '',                      // M - Pendiente
-      fechaValidacionNatu: '',         // N
-      muestrasLaboratorio: '',         // O
-      enlaces,                         // P
+      tipoFragancia,                   // D - FEMENINO / MASCULINO / UNISEX
+      categoria,                       // E
+      nombreProducto,                  // F
+      nRefAsignado: '',                // G - Asignado por Natu
+      nombreCliente,                   // H
+      peticionFechaLanzamiento,        // I
+      fechaSolicitudComercial: today,  // J - Fecha actual
+      proveedor,                       // K
+      fechaSolicitudProveedor: '',     // L
+      fechaLlegadaPropuesta: '',       // M
+      estado: '',                      // N - se sobreescribirá con PENDIENTE en addReferencia
+      fechaValidacionNatu: '',         // O
+      muestrasLaboratorio: '',         // P
+      enlaces,                         // Q
     };
 
     const result = await addReferencia(newReferencia);
