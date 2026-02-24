@@ -19,6 +19,7 @@ export default function App() {
   const [filters, setFilters] = useState({
     comercial: '',
     tipoProducto: '',
+    tipoFragancia: '',
     categoria: '',
     estado: '',
     fechaDesde: '',
@@ -48,6 +49,7 @@ export default function App() {
         referencias.map((r) => r.tipoProducto),
         ['vvcc']
       ),
+      tiposFragancia: normalizeOptions(referencias.map((r) => r.tipoFragancia)),
       categorias: normalizeOptions(referencias.map((r) => r.categoria)),
     };
   }, [referencias]);
@@ -59,6 +61,8 @@ export default function App() {
         (r.nombreComercial || '').trim().toUpperCase() !== filters.comercial) return false;
       if (filters.tipoProducto &&
         (r.tipoProducto || '').trim().toUpperCase() !== filters.tipoProducto) return false;
+      if (filters.tipoFragancia &&
+        (r.tipoFragancia || '').trim().toUpperCase() !== filters.tipoFragancia) return false;
       if (filters.categoria &&
         (r.categoria || '').trim().toUpperCase() !== filters.categoria) return false;
       if (filters.estado) {
@@ -80,7 +84,7 @@ export default function App() {
   }, [referencias, filters]);
 
   const clearFilters = () =>
-    setFilters({ comercial: '', tipoProducto: '', categoria: '', estado: '', fechaDesde: '', fechaHasta: '' });
+    setFilters({ comercial: '', tipoProducto: '', tipoFragancia: '', categoria: '', estado: '', fechaDesde: '', fechaHasta: '' });
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
