@@ -18,10 +18,12 @@
   /* Estado badges */
   --color-aprobado: #16a34a;
   --color-aprobado-bg: #dcfce7;
-  --color-evaluacion: #ea580c;
-  --color-evaluacion-bg: #ffedd5;
+  --color-evaluando: #0284c7;
+  --color-evaluando-bg: #e0f2fe;
   --color-testando: #2563eb;
   --color-testando-bg: #dbeafe;
+  --color-pendiente: #d97706;
+  --color-pendiente-bg: #fef3c7;
   --color-sin-estado: #64748b;
   --color-sin-estado-bg: #f1f5f9;
 

@@ -3,7 +3,6 @@ import { getEstadoBadgeClass, getEstadoLabel, getTipoBadgeClass } from './Refere
 import './DetalleModal.css';
 
 const FIELD_LABELS = {
-  numero: 'Nº',
   nombreComercial: 'Nombre del comercial',
   tipoProducto: 'Tipo de producto',
   categoria: 'Categoría',

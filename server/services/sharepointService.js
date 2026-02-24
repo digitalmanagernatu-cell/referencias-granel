@@ -309,20 +309,20 @@ async function appendRowViaWorkbookSession(rowValues, nombreProducto) {
   const base = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
 
-  // ── 1. Create persistent session (retry on transient lock) ────────────────
+  // ── 1. Try persistent session ONCE; fall through immediately on 423 ───────
+  // Do NOT retry createSession — if the file is open in Excel Online (423),
+  // go sessionless right away (Microsoft creates an auto-session per request).
   let sessionId = null;
   try {
-    const res = await withRetry(
-      () => axios.post(graphUrl(`${workbookBase}/createSession`), { persistChanges: true }, { headers: base }),
-      'createSession'
+    const res = await axios.post(
+      graphUrl(`${workbookBase}/createSession`),
+      { persistChanges: true },
+      { headers: base }
     );
     sessionId = res.data.id;
   } catch (err) {
     const status = err.response && err.response.status;
     if (status === 423) {
-      // Persistent session unavailable — fall through to sessionless mode.
-      // Microsoft creates a temporary auto-session per-request; writes still
-      // land in the file even when another user's session is active.
       console.warn('[appendRowViaWorkbookSession] createSession 423 – proceeding sessionless');
     } else {
       throw err;
@@ -394,14 +394,10 @@ async function appendRowViaWorkbookSession(rowValues, nombreProducto) {
 }
 
 /**
- * POST a new referencia row to the Excel.
+ * POST a new referencia row to the Excel via the Graph Workbook API.
  *
- * Uses the Workbook API as primary path — does NOT replace the file binary,
- * so it works even when another user has the file open in Excel/Excel Online.
- * Server-side retries handle transient 423 / notAllowed locking errors.
- *
- * Auth-only fallback (403/401): falls back to download → modify → re-upload,
- * which is only reached when the Workbook API is blocked by app permissions.
+ * Never falls back to binary download+upload — that path strips Excel
+ * formatting (cell colours, borders, number formats).
  * New solicitudes always receive estado = 'PENDIENTE'.
  *
  * @param {Object} data  Fields matching the COLUMNS mapping
@@ -415,65 +411,19 @@ async function addReferencia(data) {
   const rowValues = objectToRow(dataWithDefaults);
   const nombreProducto = data.nombreProducto || '';
 
-  // ── Primary path: Workbook API (no binary replacement) ────────────────────
   try {
     const sheetRow = await appendRowViaWorkbookSession(rowValues, nombreProducto);
     return { sheetRow, ...dataWithDefaults };
-  } catch (workbookErr) {
-    if (workbookErr.code === 'DUPLICATE') throw workbookErr; // propagate as-is
-
-    const status = workbookErr.response && workbookErr.response.status;
-    const isAuthBlock = status === 401 || status === 403;
-    if (!isAuthBlock) {
-      // Surface the real error (could be workbook API misconfigured, sheet not found, etc.)
-      const msg = workbookErr.response
-        ? `${workbookErr.response.status} – ${JSON.stringify(workbookErr.response.data)}`
-        : workbookErr.message;
-      const e = new Error(`No se pudo guardar en el Excel: ${msg}`);
-      e.status = status || 500;
-      throw e;
-    }
-    console.warn('[addReferencia] Workbook API bloqueada por permisos (%d), usando descarga/subida', status);
+  } catch (err) {
+    if (err.code === 'DUPLICATE') throw err;
+    const status = err.response && err.response.status;
+    const msg = err.response
+      ? `${status} – ${JSON.stringify(err.response.data)}`
+      : err.message;
+    const e = new Error(`No se pudo guardar en el Excel: ${msg}`);
+    e.status = status || 500;
+    throw e;
   }
-
-  // ── Auth fallback: download → parse → modify → upload ─────────────────────
-  // (only reached when app-only auth is blocked from using the Workbook API)
-  const buffer = await downloadExcel();
-  const { workbook, sheet, allValues } = parseSheet(buffer);
-
-  const nombreProductoIdx = COLUMNS.indexOf('nombreProducto'); // col E
-  let lastDataRowIdx = DATA_START_ROW - 2; // 0-based, just before data area
-  const newNameNorm = nombreProducto.trim().toLowerCase();
-
-  for (let i = DATA_START_ROW - 1; i < allValues.length; i++) {
-    const existing = allValues[i] && allValues[i][nombreProductoIdx]
-      ? String(allValues[i][nombreProductoIdx]).trim()
-      : '';
-    if (!existing) continue;
-    if (existing.toLowerCase() === newNameNorm) {
-      const dup = new Error(`La referencia "${nombreProducto}" ya está solicitada`);
-      dup.code = 'DUPLICATE';
-      throw dup;
-    }
-    lastDataRowIdx = i;
-  }
-
-  const nextRowIdx = lastDataRowIdx + 1; // 0-based
-
-  COLUMNS.forEach((_col, colIdx) => {
-    const cellRef = XLSX.utils.encode_cell({ r: nextRowIdx, c: colIdx });
-    sheet[cellRef] = { v: rowValues[colIdx], t: 's' };
-  });
-
-  const ref = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
-  ref.e.r = Math.max(ref.e.r, nextRowIdx);
-  ref.e.c = Math.max(ref.e.c, COLUMNS.length - 1);
-  sheet['!ref'] = XLSX.utils.encode_range(ref);
-
-  const newBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-  await uploadExcel(newBuffer);
-
-  return { sheetRow: nextRowIdx + 1, ...dataWithDefaults };
 }
 
 /**

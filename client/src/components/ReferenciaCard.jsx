@@ -3,9 +3,10 @@ import './ReferenciaCard.css';
 // ─── Badge helpers ──────────────────────────────────────────────────────────
 export function getEstadoBadgeClass(estado) {
   const e = (estado || '').trim().toUpperCase();
-  if (e === 'APROBADO') return 'badge badge-aprobado';
-  if (e === 'EVALUACIÓN' || e === 'EVALUACION') return 'badge badge-evaluacion';
-  if (e === 'TESTANDO') return 'badge badge-testando';
+  if (e === 'APROBADO')  return 'badge badge-aprobado';
+  if (e === 'EVALUANDO') return 'badge badge-evaluando';
+  if (e === 'TESTANDO')  return 'badge badge-testando';
+  if (e === 'PENDIENTE') return 'badge badge-pendiente';
   return 'badge badge-sin-estado';
 }
 
