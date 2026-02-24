@@ -39,9 +39,10 @@
   line-height: 1;
 }
 
-.kpi-aprobado  .kpi-value { color: #16a34a; }
+.kpi-pendiente .kpi-value { color: #d97706; }
 .kpi-evaluando .kpi-value { color: #ea580c; }
 .kpi-testando  .kpi-value { color: #2563eb; }
+.kpi-aprobado  .kpi-value { color: #16a34a; }
 
 /* ─── Charts row ──────────────────────────────────────────────────────────── */
 .charts-row {
