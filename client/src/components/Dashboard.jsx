@@ -159,7 +159,7 @@ export default function Dashboard({ referencias }) {
       {/* Pie charts */}
       {total > 0 && (
         <div className="charts-row">
-          <ChartCard title="Por comercial" slices={comercialSlices} />
+          <ChartCard title="Por solicitante" slices={comercialSlices} />
           <ChartCard title="Por categoría" slices={catSlices} />
           <ChartCard title="Por tipo de producto" slices={tipoSlices} />
         </div>

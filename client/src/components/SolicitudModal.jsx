@@ -118,7 +118,7 @@ export default function SolicitudModal({ onClose, onSuccess }) {
               {/* Nombre Comercial */}
               <div className="form-group">
                 <label className="form-label" htmlFor="s-comercial">
-                  Nombre Comercial <span className="required">*</span>
+                  Nombre Solicitante <span className="required">*</span>
                 </label>
                 <select
                   id="s-comercial"
@@ -138,7 +138,7 @@ export default function SolicitudModal({ onClose, onSuccess }) {
               {isOtroComercial && (
                 <div className="form-group">
                   <label className="form-label" htmlFor="s-comercial-custom">
-                    Nombre del comercial <span className="required">*</span>
+                    Nombre <span className="required">*</span>
                   </label>
                   <input
                     id="s-comercial-custom"
