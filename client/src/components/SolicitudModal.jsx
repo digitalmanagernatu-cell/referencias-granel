@@ -146,7 +146,7 @@ export default function SolicitudModal({ onClose, onSuccess }) {
                     className={`form-control${errors.nombreComercial ? ' error' : ''}`}
                     placeholder="Escribe el nombre..."
                     value={form.nombreComercialCustom}
-                    onChange={(e) => update('nombreComercialCustom', e.target.value)}
+                    onChange={(e) => update('nombreComercialCustom', e.target.value.toUpperCase())}
                     disabled={submitting}
                     autoFocus
                   />
