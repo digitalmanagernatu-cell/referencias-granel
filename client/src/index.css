@@ -28,16 +28,16 @@
   --color-sin-estado-bg: #f1f5f9;
 
   /* Tipo badges */
-  --color-normal: #64748b;
-  --color-normal-bg: #f1f5f9;
-  --color-nicho: #7c3aed;
-  --color-nicho-bg: #ede9fe;
-  --color-selecto: #b45309;
-  --color-selecto-bg: #fef3c7;
-  --color-bodymist: #db2777;
-  --color-bodymist-bg: #fce7f3;
-  --color-exclusivo: #dc2626;
-  --color-exclusivo-bg: #fee2e2;
+  --color-normal: #5a5550;
+  --color-normal-bg: #dad7d1;
+  --color-nicho: #7a3530;
+  --color-nicho-bg: #e2a29a;
+  --color-selecto: #7a5030;
+  --color-selecto-bg: #e4bca5;
+  --color-bodymist: #4a5040;
+  --color-bodymist-bg: #d3d7c4;
+  --color-exclusivo: #5a5035;
+  --color-exclusivo-bg: #dcd5be;
 
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
