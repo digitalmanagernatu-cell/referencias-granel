@@ -10,7 +10,7 @@ export default function FilterBar({ filters, setFilters, opciones, onClear, acti
       <div className="filterbar-grid">
         {/* Comercial */}
         <div className="filter-group">
-          <label className="filter-label" htmlFor="f-comercial">Comercial</label>
+          <label className="filter-label" htmlFor="f-comercial">Solicitante</label>
           <select
             id="f-comercial"
             className="filter-control"
