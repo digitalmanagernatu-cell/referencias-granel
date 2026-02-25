@@ -77,6 +77,35 @@
   margin-left: 6px;
 }
 
+/* ─── Clickable badges & categoria ──────────────────────────────────────── */
+.badge-filter {
+  cursor: pointer;
+  transition: opacity 0.15s ease, outline 0.15s ease;
+}
+.badge-filter:hover {
+  opacity: 0.8;
+}
+.badge-filter-active {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+.cat-filter {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  border-bottom: 1px dashed var(--color-text-muted);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.cat-filter:hover {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-text-secondary);
+}
+.cat-filter-active {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  border-bottom: 2px solid var(--color-text-primary);
+}
+
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .tabla th,

@@ -97,6 +97,9 @@ export default function App() {
   const clearFilters = () =>
     setFilters({ comercial: '', tipoProducto: '', tipoFragancia: '', categoria: '', estado: '', fechaDesde: '', fechaHasta: '' });
 
+  const handleFilterClick = (key, value) =>
+    setFilters(prev => ({ ...prev, [key]: prev[key] === value ? '' : value }));
+
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   return (
@@ -135,6 +138,8 @@ export default function App() {
           <TablaReferencias
             referencias={filtered}
             onVerDetalles={setDetalleReferencia}
+            onFilterClick={handleFilterClick}
+            activeFilters={filters}
           />
         )}
       </main>
