@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Header from './components/Header.jsx';
 import FilterBar from './components/FilterBar.jsx';
 import Dashboard from './components/Dashboard.jsx';
@@ -94,6 +94,14 @@ export default function App() {
     return result;
   }, [referencias, filters]);
 
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(0);
+
+  useEffect(() => {
+    if (autoRefreshInterval === 0) return;
+    const id = setInterval(refetch, autoRefreshInterval * 1000);
+    return () => clearInterval(id);
+  }, [autoRefreshInterval, refetch]);
+
   const clearFilters = () =>
     setFilters({ comercial: '', tipoProducto: '', tipoFragancia: '', categoria: '', estado: '', fechaDesde: '', fechaHasta: '' });
 
@@ -104,7 +112,13 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header onSolicitar={() => setSolicitudOpen(true)} />
+      <Header
+        onSolicitar={() => setSolicitudOpen(true)}
+        onRefresh={refetch}
+        refreshing={loading}
+        autoRefreshInterval={autoRefreshInterval}
+        onAutoRefreshChange={setAutoRefreshInterval}
+      />
 
       <main className="main">
         {/* Dashboard: KPI cards + pie charts — reflect active filters */}
