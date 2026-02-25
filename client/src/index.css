@@ -11,9 +11,9 @@
   --color-text-primary: #1a2332;
   --color-text-secondary: #64748b;
   --color-text-muted: #94a3b8;
-  --color-accent: #1b4332;
-  --color-accent-light: #2d6a4f;
-  --color-accent-hover: #145228;
+  --color-accent: #3E3F3E;
+  --color-accent-light: #555655;
+  --color-accent-hover: #282928;
 
   /* Estado badges */
   --color-aprobado: #16a34a;

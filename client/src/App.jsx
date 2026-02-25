@@ -155,6 +155,18 @@ export default function App() {
           }}
         />
       )}
+
+      <footer className="app-footer">
+        By{' '}
+        <a
+          href="https://www.linkedin.com/in/irene-medina-fernandez/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Digital Manager
+        </a>
+        {' '}NATU Lab
+      </footer>
     </div>
   );
 }
