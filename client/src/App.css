@@ -261,6 +261,26 @@
 .badge-bodymist    { background: var(--color-bodymist-bg);    color: var(--color-bodymist); }
 .badge-exclusivo   { background: var(--color-exclusivo-bg);   color: var(--color-exclusivo); }
 
+/* ─── Footer ─────────────────────────────────────────────────────────────── */
+.app-footer {
+  text-align: center;
+  padding: 16px 24px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border);
+}
+
+.app-footer a {
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+
+.app-footer a:hover {
+  color: var(--color-text-primary);
+}
+
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .main { padding: 16px 16px 32px; }
