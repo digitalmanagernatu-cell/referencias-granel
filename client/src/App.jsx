@@ -94,13 +94,11 @@ export default function App() {
     return result;
   }, [referencias, filters]);
 
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(0);
-
+  // Auto-refresco fijo cada 10 minutos
   useEffect(() => {
-    if (autoRefreshInterval === 0) return;
-    const id = setInterval(refetch, autoRefreshInterval * 1000);
+    const id = setInterval(refetch, 10 * 60 * 1000);
     return () => clearInterval(id);
-  }, [autoRefreshInterval, refetch]);
+  }, [refetch]);
 
   const clearFilters = () =>
     setFilters({ comercial: '', tipoProducto: '', tipoFragancia: '', categoria: '', estado: '', fechaDesde: '', fechaHasta: '' });
@@ -116,8 +114,6 @@ export default function App() {
         onSolicitar={() => setSolicitudOpen(true)}
         onRefresh={refetch}
         refreshing={loading}
-        autoRefreshInterval={autoRefreshInterval}
-        onAutoRefreshChange={setAutoRefreshInterval}
       />
 
       <main className="main">

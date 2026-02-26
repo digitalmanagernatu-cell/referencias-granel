@@ -17,7 +17,7 @@ const AUTO_OPTIONS = [
   { value: 600, label: '10 min' },
 ];
 
-export default function Header({ onSolicitar, onRefresh, refreshing, autoRefreshInterval, onAutoRefreshChange }) {
+export default function Header({ onSolicitar, onRefresh, refreshing }) {
   return (
     <header className="header">
       <div className="header-inner">
@@ -41,17 +41,6 @@ export default function Header({ onSolicitar, onRefresh, refreshing, autoRefresh
           >
             <IconRefresh />
           </button>
-          <select
-            className="select-autorefresh"
-            value={autoRefreshInterval}
-            onChange={(e) => onAutoRefreshChange(Number(e.target.value))}
-            title="Frecuencia de actualización automática"
-            aria-label="Actualización automática"
-          >
-            {AUTO_OPTIONS.map(({ value, label }) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
         </div>
 
         <button className="btn-solicitar" onClick={onSolicitar}>
