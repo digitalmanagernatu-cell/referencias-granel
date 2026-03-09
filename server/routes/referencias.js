@@ -51,11 +51,12 @@ router.post('/', async (req, res, next) => {
       });
     }
 
-    const today = new Date().toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
+    const now = new Date();
+    const today = [
+      String(now.getDate()).padStart(2, '0'),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      now.getFullYear(),
+    ].join('/');
 
     const newReferencia = {
       numero: '',                      // A - Asignado por Natu
