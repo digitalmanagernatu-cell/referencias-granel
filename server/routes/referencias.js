@@ -53,9 +53,9 @@ router.post('/', async (req, res, next) => {
 
     const now = new Date();
     const today = [
-      String(now.getDate()).padStart(2, '0'),
-      String(now.getMonth() + 1).padStart(2, '0'),
-      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),  // MM  (Excel SharePoint usa locale US)
+      String(now.getDate()).padStart(2, '0'),          // DD
+      now.getFullYear(),                               // YYYY
     ].join('/');
 
     const newReferencia = {
