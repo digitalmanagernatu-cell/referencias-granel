@@ -36,6 +36,7 @@ export default function TablaReferencias({ referencias, onVerDetalles, onFilterC
         <thead>
           <tr>
             <th>Fecha solicitud</th>
+            <th>Nº Ref.</th>
             <th>Nombre producto</th>
             <th>Tipo producto</th>
             <th>Categoría</th>
@@ -58,6 +59,9 @@ export default function TablaReferencias({ referencias, onVerDetalles, onFilterC
               <tr key={ref._sheetRow ?? idx}>
                 <td className="td-fecha">
                   {ref.fechaSolicitudComercial || '—'}
+                </td>
+                <td className="td-nref">
+                  {ref.nRefAsignado || '—'}
                 </td>
                 <td className="td-nombre" title={ref.nombreProducto}>
                   {ref.nombreProducto || '—'}
