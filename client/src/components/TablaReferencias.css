@@ -57,6 +57,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+.td-nref {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
 .td-nombre {
   font-weight: 500;
   max-width: 220px;
