@@ -21,6 +21,7 @@ export function getTipoBadgeClass(tipo) {
   if (t === 'selecto') return 'badge badge-selecto';
   if (t === 'body mist' || t === 'bodymist') return 'badge badge-bodymist';
   if (t === 'exclusivo' || t === 'exclusiva') return 'badge badge-exclusivo';
+  if (t === 'extracto') return 'badge badge-extracto';
   return 'badge badge-normal'; // Normal / default
 }
 

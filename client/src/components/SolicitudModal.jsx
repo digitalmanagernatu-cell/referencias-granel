@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import './SolicitudModal.css';
 
 const COMERCIALES = ['TONI', 'MAURO', 'JAIME'];
-const TIPOS = ['NORMAL', 'NICHO', 'SELECTO', 'BODY MIST', 'EXCLUSIVA'];
+const TIPOS = ['NORMAL', 'NICHO', 'SELECTO', 'BODY MIST', 'EXCLUSIVA', 'EXTRACTO'];
 const TIPO_FRAGANCIA = ['FEMENINO', 'MASCULINO', 'UNISEX'];
 const CATEGORIAS = ['PERFUMERÍA', 'AMBIENTACIÓN'];
 

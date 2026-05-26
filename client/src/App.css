@@ -260,6 +260,7 @@
 .badge-selecto     { background: var(--color-selecto-bg);     color: var(--color-selecto); }
 .badge-bodymist    { background: var(--color-bodymist-bg);    color: var(--color-bodymist); }
 .badge-exclusivo   { background: var(--color-exclusivo-bg);   color: var(--color-exclusivo); }
+.badge-extracto    { background: var(--color-extracto-bg);    color: var(--color-extracto); }
 
 /* ─── Footer ─────────────────────────────────────────────────────────────── */
 .app-footer {
