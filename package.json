@@ -2,12 +2,13 @@
   "name": "referencias-granel",
   "version": "1.0.0",
   "description": "Dashboard de gestión de solicitudes de nuevas referencias de granel",
+  "main": "server/index.js",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "cd server && npm run dev",
     "client": "cd client && npm run dev",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
-    "build": "cd server && npm install && cd ../client && npm install && npm run build",
+    "build": "cd client && npm install && npm run build",
     "vercel-build": "cd client && npm install && npm run build",
     "start": "node server/index.js"
   },
@@ -16,9 +17,12 @@
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2"
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.9"
   }
 }
