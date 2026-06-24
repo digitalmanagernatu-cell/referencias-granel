@@ -6,7 +6,8 @@ export function getEstadoBadgeClass(estado) {
   if (e === 'APROBADO')  return 'badge badge-aprobado';
   if (e === 'EVALUANDO') return 'badge badge-evaluando';
   if (e === 'TESTANDO')  return 'badge badge-testando';
-  if (e === 'PENDIENTE') return 'badge badge-pendiente';
+  if (e === 'PENDIENTE')  return 'badge badge-pendiente';
+  if (e === 'RECHAZADO') return 'badge badge-rechazado';
   return 'badge badge-sin-estado';
 }
 
