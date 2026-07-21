@@ -34,6 +34,7 @@ const COLUMNS = [
   'fechaValidacionNatu', // O
   'muestrasLaboratorio', // P
   'enlaces',             // Q
+  'notasLaboratorio',    // R - nueva columna
 ];
 
 // ─── MSAL client ───────────────────────────────────────────────────────────

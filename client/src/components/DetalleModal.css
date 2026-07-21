@@ -57,6 +57,18 @@
 }
 .detalle-link:hover { color: var(--color-accent); }
 
+.detalle-notas {
+  font-size: 13px;
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  background: #f8fafc;
+  border-left: 3px solid var(--color-border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 10px 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .detalle-empty {
   text-align: center;
   color: var(--color-text-muted);

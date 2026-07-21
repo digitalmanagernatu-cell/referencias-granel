@@ -18,6 +18,7 @@ const FIELD_LABELS = {
   fechaValidacionNatu: 'Fecha de validación Natu',
   muestrasLaboratorio: 'Muestras laboratorio',
   enlaces: 'Enlace (Fragrantica)',
+  notasLaboratorio: 'Notas laboratorio',
 };
 
 export default function DetalleModal({ referencia, onClose }) {
@@ -68,6 +69,15 @@ export default function DetalleModal({ referencia, onClose }) {
                     >
                       {value.trim()}
                     </a>
+                  </div>
+                );
+              }
+
+              if (key === 'notasLaboratorio') {
+                return (
+                  <div key={key} className="detalle-field detalle-field-full">
+                    <span className="detalle-label">{label}</span>
+                    <p className="detalle-notas">{value}</p>
                   </div>
                 );
               }
