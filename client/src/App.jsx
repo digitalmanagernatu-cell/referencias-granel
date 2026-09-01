@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard.jsx';
 import TablaReferencias from './components/TablaReferencias.jsx';
 import DetalleModal from './components/DetalleModal.jsx';
 import SolicitudModal from './components/SolicitudModal.jsx';
+import EnlaceModal from './components/EnlaceModal.jsx';
 import useReferencias from './hooks/useReferencias.js';
 import './App.css';
 
@@ -14,6 +15,7 @@ export default function App() {
   // Modal state
   const [detalleReferencia, setDetalleReferencia] = useState(null);
   const [solicitudOpen, setSolicitudOpen] = useState(false);
+  const [enlaceRef, setEnlaceRef] = useState(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -150,6 +152,7 @@ export default function App() {
             onVerDetalles={setDetalleReferencia}
             onFilterClick={handleFilterClick}
             activeFilters={filters}
+            onAddEnlace={setEnlaceRef}
           />
         )}
       </main>
@@ -168,6 +171,14 @@ export default function App() {
             setSolicitudOpen(false);
             refetch();
           }}
+        />
+      )}
+
+      {enlaceRef && (
+        <EnlaceModal
+          referencia={enlaceRef}
+          onClose={() => setEnlaceRef(null)}
+          onSuccess={() => { setEnlaceRef(null); refetch(); }}
         />
       )}
 

@@ -106,6 +106,16 @@
   border-color: #cbd5e1;
 }
 
+.btn-add-enlace {
+  border-style: dashed;
+  color: var(--color-text-muted);
+}
+.btn-add-enlace:hover {
+  border-style: solid;
+  color: var(--color-accent-light);
+  background: var(--color-bg);
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--color-text-secondary);
@@ -254,6 +264,7 @@
 .badge-testando    { background: var(--color-testando-bg);    color: var(--color-testando); }
 .badge-pendiente   { background: var(--color-pendiente-bg);   color: var(--color-pendiente); }
 .badge-rechazado   { background: var(--color-rechazado-bg);   color: var(--color-rechazado); font-weight: 700; }
+.badge-descartado  { background: var(--color-descartado-bg);  color: var(--color-descartado); font-weight: 700; }
 .badge-sin-estado  { background: var(--color-sin-estado-bg);  color: var(--color-sin-estado); }
 
 .badge-normal      { background: var(--color-normal-bg);      color: var(--color-normal); }

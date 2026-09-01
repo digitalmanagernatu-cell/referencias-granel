@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getReferencias, addReferencia } = require('../services/sharepointService');
+const { getReferencias, addReferencia, updateEnlace } = require('../services/sharepointService');
 
 // ─── GET /api/referencias ──────────────────────────────────────────────────
 // Devuelve todas las referencias desde la fila 56 del Excel en SharePoint.
@@ -85,6 +85,26 @@ router.post('/', async (req, res, next) => {
     if (err.code === 'DUPLICATE') {
       return res.status(409).json({ success: false, error: err.message });
     }
+    next(err);
+  }
+});
+
+// ─── PATCH /api/referencias/:sheetRow/enlace ───────────────────────────────
+// Updates the Fragrantica URL (column Q) for an existing row.
+router.patch('/:sheetRow/enlace', async (req, res, next) => {
+  try {
+    const sheetRow = parseInt(req.params.sheetRow, 10);
+    if (isNaN(sheetRow) || sheetRow < 1) {
+      return res.status(400).json({ success: false, error: 'sheetRow inválido' });
+    }
+    const { enlace } = req.body;
+    if (!enlace || !enlace.trim()) {
+      return res.status(400).json({ success: false, error: 'El campo enlace es obligatorio' });
+    }
+    await updateEnlace(sheetRow, enlace.trim());
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[PATCH /api/referencias/:sheetRow/enlace]', err.message);
     next(err);
   }
 });

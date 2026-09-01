@@ -10,7 +10,15 @@ const IconLink = () => (
   </svg>
 );
 
-export default function TablaReferencias({ referencias, onVerDetalles, onFilterClick, activeFilters = {} }) {
+const IconPlus = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+export default function TablaReferencias({ referencias, onVerDetalles, onFilterClick, activeFilters = {}, onAddEnlace }) {
   if (referencias.length === 0) return null;
 
   const handleTipo = (tipoProducto) => {
@@ -105,18 +113,27 @@ export default function TablaReferencias({ referencias, onVerDetalles, onFilterC
                   </span>
                 </td>
                 <td className="td-actions">
-                  <a
-                    href={hasEnlace ? ref.enlaces.trim() : undefined}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`btn btn-outline btn-sm${!hasEnlace ? ' btn-disabled' : ''}`}
-                    tabIndex={hasEnlace ? 0 : -1}
-                    aria-disabled={!hasEnlace}
-                    title={hasEnlace ? 'Ver en Fragrantica' : 'Sin enlace disponible'}
-                  >
-                    <IconLink />
-                    Fragrantica
-                  </a>
+                  {hasEnlace ? (
+                    <a
+                      href={ref.enlaces.trim()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-outline btn-sm"
+                      title="Ver en Fragrantica"
+                    >
+                      <IconLink />
+                      Fragrantica
+                    </a>
+                  ) : (
+                    <button
+                      className="btn btn-outline btn-sm btn-add-enlace"
+                      onClick={() => onAddEnlace && onAddEnlace(ref)}
+                      title="Añadir enlace de Fragrantica"
+                    >
+                      <IconPlus />
+                      Fragrantica
+                    </button>
+                  )}
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={() => onVerDetalles(ref)}

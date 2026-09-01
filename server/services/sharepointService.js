@@ -601,6 +601,83 @@ async function addReferencia(data) {
 }
 
 /**
+ * Updates a single cell (column Q – enlaces) for an existing row.
+ * @param {number} sheetRow  1-based Excel row number (from referencia._sheetRow)
+ * @param {string} enlace    New URL value to write
+ */
+async function updateEnlace(sheetRow, enlace) {
+  const enlaceIdx = COLUMNS.indexOf('enlaces'); // 16 → column Q
+  const colLetter = String.fromCharCode(65 + enlaceIdx);
+  const address = `${colLetter}${sheetRow}`;
+
+  // ── Primary: Workbook API ─────────────────────────────────────────────────
+  try {
+    const token = await getAccessToken();
+    const workbookBase = await resolveWorkbookBase(token);
+    const base = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
+
+    let sessionId = null;
+    try {
+      const res = await axios.post(
+        graphUrl(`${workbookBase}/createSession`),
+        { persistChanges: true },
+        { headers: base }
+      );
+      sessionId = res.data.id;
+    } catch (err) {
+      const status = err.response && err.response.status;
+      if (status === 423 || status === 403) {
+        console.warn('[updateEnlace] createSession failed (%d) – sessionless', status);
+      } else {
+        throw err;
+      }
+    }
+
+    const reqHeaders = sessionId ? { ...base, 'workbook-session-id': sessionId } : base;
+
+    async function closeSession() {
+      if (!sessionId) return;
+      try { await axios.post(graphUrl(`${workbookBase}/closeSession`), {}, { headers: reqHeaders }); }
+      catch (_) { /* best-effort */ }
+    }
+
+    try {
+      await withRetry(
+        () => axios.patch(
+          graphUrl(`${sheetBase}/range(address='${address}')`),
+          { values: [[enlace]] },
+          { headers: reqHeaders }
+        ),
+        'updateEnlace', 4, 500
+      );
+      await closeSession();
+      return;
+    } catch (err) {
+      await closeSession();
+      throw err;
+    }
+  } catch (workbookErr) {
+    const status = workbookErr.response && workbookErr.response.status;
+    if (status !== 403 && status !== 401) throw workbookErr;
+    console.warn('[updateEnlace] Workbook API bloqueada (%d) – fallback ExcelJS', status);
+  }
+
+  // ── Fallback: binary download → ExcelJS cell edit → re-upload ────────────
+  const buffer = await downloadExcel();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const ws = wb.getWorksheet(SHEET_NAME);
+  if (!ws) throw new Error(`Hoja "${SHEET_NAME}" no encontrada`);
+
+  const enlaceIdx2 = COLUMNS.indexOf('enlaces');
+  ws.getCell(sheetRow, enlaceIdx2 + 1).value = enlace || null;
+
+  const newBuffer = await wb.xlsx.writeBuffer();
+  await uploadExcel(Buffer.from(newBuffer));
+}
+
+/**
  * Step-by-step diagnostic: tests token, site, drives, file access, and download.
  */
 async function diagnose() {
@@ -761,4 +838,4 @@ async function diagnose() {
   return result;
 }
 
-module.exports = { getReferencias, addReferencia, diagnose, getTokenPermissions };
+module.exports = { getReferencias, addReferencia, updateEnlace, diagnose, getTokenPermissions };
