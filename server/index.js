@@ -21,7 +21,15 @@ app.use(express.json());
 
 // Servir frontend compilado
 const clientDist = path.join(__dirname, '../client/dist');
-app.use(express.static(clientDist));
+
+// Hashed assets (JS/CSS/images with content hash in filename) → cache 1 year
+app.use('/assets', express.static(path.join(clientDist, 'assets'), {
+  maxAge: '1y',
+  immutable: true,
+}));
+
+// Everything else (favicon, logo, etc.) — no index.html from here
+app.use(express.static(clientDist, { index: false }));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -51,8 +59,11 @@ app.get('/api/permissions', async (req, res) => {
 // Routes
 app.use('/api/referencias', referenciasRouter);
 
-// Catch-all: servir React SPA para rutas no-API
+// Catch-all: servir React SPA — index.html nunca se cachea
 app.get('*', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(clientDist, 'index.html'));
 });
 
