@@ -10,6 +10,14 @@ const IconLink = () => (
   </svg>
 );
 
+const IconPencil = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
+
 const IconPlus = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -18,7 +26,7 @@ const IconPlus = () => (
   </svg>
 );
 
-export default function TablaReferencias({ referencias, onVerDetalles, onFilterClick, activeFilters = {}, onAddEnlace }) {
+export default function TablaReferencias({ referencias, onVerDetalles, onFilterClick, activeFilters = {}, onAddEnlace, onEditNRef }) {
   if (referencias.length === 0) return null;
 
   const handleTipo = (tipoProducto) => {
@@ -69,7 +77,17 @@ export default function TablaReferencias({ referencias, onVerDetalles, onFilterC
                   {ref.fechaSolicitudComercial || '—'}
                 </td>
                 <td className="td-nref">
-                  {ref.nRefAsignado || '—'}
+                  {ref.nRefAsignado ? (
+                    ref.nRefAsignado
+                  ) : (
+                    <button
+                      className="btn-nref-edit"
+                      onClick={() => onEditNRef && onEditNRef(ref)}
+                      title="Asignar número de referencia"
+                    >
+                      <IconPencil />
+                    </button>
+                  )}
                 </td>
                 <td className="td-nombre" title={ref.nombreProducto}>
                   {ref.nombreProducto || '—'}

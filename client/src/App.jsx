@@ -6,6 +6,7 @@ import TablaReferencias from './components/TablaReferencias.jsx';
 import DetalleModal from './components/DetalleModal.jsx';
 import SolicitudModal from './components/SolicitudModal.jsx';
 import EnlaceModal from './components/EnlaceModal.jsx';
+import NRefModal from './components/NRefModal.jsx';
 import useReferencias from './hooks/useReferencias.js';
 import './App.css';
 
@@ -16,6 +17,7 @@ export default function App() {
   const [detalleReferencia, setDetalleReferencia] = useState(null);
   const [solicitudOpen, setSolicitudOpen] = useState(false);
   const [enlaceRef, setEnlaceRef] = useState(null);
+  const [nRefEdit, setNRefEdit] = useState(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -153,6 +155,7 @@ export default function App() {
             onFilterClick={handleFilterClick}
             activeFilters={filters}
             onAddEnlace={setEnlaceRef}
+            onEditNRef={setNRefEdit}
           />
         )}
       </main>
@@ -171,6 +174,14 @@ export default function App() {
             setSolicitudOpen(false);
             refetch();
           }}
+        />
+      )}
+
+      {nRefEdit && (
+        <NRefModal
+          referencia={nRefEdit}
+          onClose={() => setNRefEdit(null)}
+          onSuccess={() => { setNRefEdit(null); refetch(); }}
         />
       )}
 

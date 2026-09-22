@@ -106,6 +106,26 @@
   border-color: #cbd5e1;
 }
 
+.btn-nref-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px dashed var(--color-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.btn-nref-edit:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  border-style: solid;
+  background: var(--color-accent-bg, #f0f7ff);
+}
+
 .btn-add-enlace {
   border-style: dashed;
   color: var(--color-text-muted);

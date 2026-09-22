@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getReferencias, addReferencia, updateEnlace } = require('../services/sharepointService');
+const { getReferencias, addReferencia, updateEnlace, updateNRef } = require('../services/sharepointService');
 
 // ─── GET /api/referencias ──────────────────────────────────────────────────
 // Devuelve todas las referencias desde la fila 56 del Excel en SharePoint.
@@ -105,6 +105,26 @@ router.patch('/:sheetRow/enlace', async (req, res, next) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[PATCH /api/referencias/:sheetRow/enlace]', err.message);
+    next(err);
+  }
+});
+
+// ─── PATCH /api/referencias/:sheetRow/nref ─────────────────────────────────
+// Updates the reference number (column G) for an existing row.
+router.patch('/:sheetRow/nref', async (req, res, next) => {
+  try {
+    const sheetRow = parseInt(req.params.sheetRow, 10);
+    if (isNaN(sheetRow) || sheetRow < 1) {
+      return res.status(400).json({ success: false, error: 'sheetRow inválido' });
+    }
+    const { nRef } = req.body;
+    if (!nRef || !nRef.trim()) {
+      return res.status(400).json({ success: false, error: 'El campo nRef es obligatorio' });
+    }
+    await updateNRef(sheetRow, nRef.trim());
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[PATCH /api/referencias/:sheetRow/nref]', err.message);
     next(err);
   }
 });
