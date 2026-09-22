@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import './NRefModal.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
-const PASSWORD = 'RefGranel';
+const PASSWORD = 'Toni2026';
 
 export default function NRefModal({ referencia, onClose, onSuccess }) {
   const [step, setStep] = useState('password'); // 'password' | 'edit'
