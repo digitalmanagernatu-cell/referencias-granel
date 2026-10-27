@@ -1,10 +1,27 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 const FROM = process.env.EMAIL_FROM || 'noreply@natulaboratories.es';
 const TO = (process.env.EMAIL_TO || 'digitalmanager@natuaromatic.com')
   .split(',')
   .map((e) => e.trim())
   .filter(Boolean);
+
+// Logo embebido en base64 para compatibilidad con todos los clientes de email
+let LOGO_B64 = '';
+try {
+  const logoPath = path.join(__dirname, '../../client/public/logo.png');
+  LOGO_B64 = fs.readFileSync(logoPath).toString('base64');
+} catch (_) { /* logo opcional */ }
+
+const LOGO_SRC = LOGO_B64
+  ? `data:image/png;base64,${LOGO_B64}`
+  : '';
+
+// Verde corporativo NATU
+const BRAND_GREEN = '#3E3F3E';
+const BRAND_GREEN_LIGHT = '#f0f4f0';
 
 function row(label, value) {
   if (!value) return '';
@@ -15,7 +32,11 @@ function row(label, value) {
     </tr>`;
 }
 
-function baseHtml({ title, color, icon, body }) {
+function baseHtml({ title, accentColor, body }) {
+  const logoHtml = LOGO_SRC
+    ? `<img src="${LOGO_SRC}" alt="NATU Lab" height="52" style="display:block;height:52px;width:auto;margin-bottom:14px">`
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -23,13 +44,19 @@ function baseHtml({ title, color, icon, body }) {
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+        <!-- Franja de acento superior -->
+        <tr><td style="background:${accentColor};height:5px;font-size:0;line-height:0">&nbsp;</td></tr>
+        <!-- Cabecera -->
         <tr>
-          <td style="background:${color};padding:24px 32px">
-            <p style="margin:0;font-size:22px;font-weight:700;color:#fff">${icon} ${title}</p>
-            <p style="margin:6px 0 0;font-size:13px;color:rgba(255,255,255,.8)">Dashboard de Referencias Granel · NATU Lab</p>
+          <td style="background:${BRAND_GREEN_LIGHT};padding:24px 32px;border-bottom:1px solid #e2e8f0">
+            ${logoHtml}
+            <p style="margin:0;font-size:20px;font-weight:700;color:#111827">${title}</p>
+            <p style="margin:4px 0 0;font-size:12px;color:#6b7280;letter-spacing:.3px">Dashboard de Referencias Granel · NATU Lab</p>
           </td>
         </tr>
+        <!-- Cuerpo -->
         <tr><td style="padding:24px 32px 8px">${body}</td></tr>
+        <!-- Pie -->
         <tr>
           <td style="padding:16px 32px 24px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px">
             Aviso automático del panel de Referencias Granel.
@@ -78,8 +105,7 @@ async function sendNuevaReferencia(referencia) {
     subject: `Nueva solicitud de referencia: ${nombre}`,
     html: baseHtml({
       title: 'Nueva solicitud de referencia',
-      color: '#2563eb',
-      icon: '📋',
+      accentColor: '#2563eb',
       body: `<p style="margin:0;color:#374151;font-size:14px">Se ha registrado una nueva solicitud de referencia en el panel.</p>${refTable(referencia)}`,
     }),
   });
@@ -91,8 +117,7 @@ async function sendCambioEstado(referencia, estadoAnterior, estadoNuevo) {
     subject: `Cambio de estado: ${nombre} → ${estadoNuevo}`,
     html: baseHtml({
       title: 'Cambio de estado',
-      color: '#7c3aed',
-      icon: '🔄',
+      accentColor: '#7c3aed',
       body: `<p style="margin:0;color:#374151;font-size:14px">El estado ha cambiado de <strong>${estadoAnterior || 'Sin estado'}</strong> a <strong>${estadoNuevo}</strong>.</p>${refTable({ ...referencia, estado: estadoNuevo })}`,
     }),
   });
@@ -104,8 +129,7 @@ async function sendNuevoComentario(referencia, comentario) {
     subject: `Nuevo comentario en: ${nombre}`,
     html: baseHtml({
       title: 'Nuevo comentario',
-      color: '#059669',
-      icon: '💬',
+      accentColor: '#059669',
       body: `<p style="margin:0;color:#374151;font-size:14px">Se ha añadido un comentario a una referencia.</p><blockquote style="margin:16px 0;padding:12px 16px;background:#f9fafb;border-left:4px solid #059669;border-radius:4px;color:#374151;font-size:14px">${comentario}</blockquote>${refTable(referencia)}`,
     }),
   });
