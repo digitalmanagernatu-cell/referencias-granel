@@ -1,12 +1,19 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-const FROM = process.env.EMAIL_FROM || 'noreply@natuaromatic.com';
 const TO = (process.env.EMAIL_TO || 'digitalmanager@natuaromatic.com')
   .split(',')
   .map((e) => e.trim())
   .filter(Boolean);
+
+function getTransporter() {
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  if (!user || !pass) return null;
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user, pass },
+  });
+}
 
 function row(label, value) {
   if (!value) return '';
@@ -25,20 +32,17 @@ function baseHtml({ title, color, icon, body }) {
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)">
-        <!-- Header -->
         <tr>
           <td style="background:${color};padding:24px 32px">
             <p style="margin:0;font-size:22px;font-weight:700;color:#fff">${icon} ${title}</p>
             <p style="margin:6px 0 0;font-size:13px;color:rgba(255,255,255,.8)">Dashboard de Referencias Granel · NATU Lab</p>
           </td>
         </tr>
-        <!-- Body -->
         <tr>
           <td style="padding:24px 32px 8px">
             ${body}
           </td>
         </tr>
-        <!-- Footer -->
         <tr>
           <td style="padding:16px 32px 24px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px">
             Este es un aviso automático generado por el panel de Referencias Granel.
@@ -68,15 +72,23 @@ function refTable(ref) {
     </table>`;
 }
 
-async function sendNuevaReferencia(referencia) {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
+async function sendMail({ subject, html }) {
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.warn('[emailService] GMAIL_USER / GMAIL_APP_PASSWORD no configuradas — email omitido');
     return;
   }
+  await transporter.sendMail({
+    from: `Referencias Granel <${process.env.GMAIL_USER}>`,
+    to: TO.join(', '),
+    subject,
+    html,
+  });
+}
+
+async function sendNuevaReferencia(referencia) {
   const nombre = referencia.nombreProducto || 'Nueva referencia';
-  await resend.emails.send({
-    from: FROM,
-    to: TO,
+  await sendMail({
     subject: `Nueva solicitud de referencia: ${nombre}`,
     html: baseHtml({
       title: 'Nueva solicitud de referencia',
@@ -92,14 +104,8 @@ async function sendNuevaReferencia(referencia) {
 }
 
 async function sendCambioEstado(referencia, estadoAnterior, estadoNuevo) {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
-    return;
-  }
   const nombre = referencia.nombreProducto || 'Referencia';
-  await resend.emails.send({
-    from: FROM,
-    to: TO,
+  await sendMail({
     subject: `Cambio de estado: ${nombre} → ${estadoNuevo}`,
     html: baseHtml({
       title: 'Cambio de estado',
@@ -117,14 +123,8 @@ async function sendCambioEstado(referencia, estadoAnterior, estadoNuevo) {
 }
 
 async function sendNuevoComentario(referencia, comentario) {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
-    return;
-  }
   const nombre = referencia.nombreProducto || 'Referencia';
-  await resend.emails.send({
-    from: FROM,
-    to: TO,
+  await sendMail({
     subject: `Nuevo comentario en: ${nombre}`,
     html: baseHtml({
       title: 'Nuevo comentario',
