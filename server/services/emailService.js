@@ -1,19 +1,12 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+const FROM = process.env.EMAIL_FROM || 'noreply@natulaboratories.es';
 const TO = (process.env.EMAIL_TO || 'digitalmanager@natuaromatic.com')
   .split(',')
   .map((e) => e.trim())
   .filter(Boolean);
-
-function getTransporter() {
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD;
-  if (!user || !pass) return null;
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user, pass },
-  });
-}
 
 function row(label, value) {
   if (!value) return '';
@@ -72,23 +65,15 @@ function refTable(ref) {
     </table>`;
 }
 
-async function sendMail({ subject, html }) {
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.warn('[emailService] GMAIL_USER / GMAIL_APP_PASSWORD no configuradas — email omitido');
+async function sendNuevaReferencia(referencia) {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
     return;
   }
-  await transporter.sendMail({
-    from: `Referencias Granel <${process.env.GMAIL_USER}>`,
-    to: TO.join(', '),
-    subject,
-    html,
-  });
-}
-
-async function sendNuevaReferencia(referencia) {
   const nombre = referencia.nombreProducto || 'Nueva referencia';
-  await sendMail({
+  await resend.emails.send({
+    from: `Referencias Granel <${FROM}>`,
+    to: TO,
     subject: `Nueva solicitud de referencia: ${nombre}`,
     html: baseHtml({
       title: 'Nueva solicitud de referencia',
@@ -104,8 +89,14 @@ async function sendNuevaReferencia(referencia) {
 }
 
 async function sendCambioEstado(referencia, estadoAnterior, estadoNuevo) {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
+    return;
+  }
   const nombre = referencia.nombreProducto || 'Referencia';
-  await sendMail({
+  await resend.emails.send({
+    from: `Referencias Granel <${FROM}>`,
+    to: TO,
     subject: `Cambio de estado: ${nombre} → ${estadoNuevo}`,
     html: baseHtml({
       title: 'Cambio de estado',
@@ -123,8 +114,14 @@ async function sendCambioEstado(referencia, estadoAnterior, estadoNuevo) {
 }
 
 async function sendNuevoComentario(referencia, comentario) {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
+    return;
+  }
   const nombre = referencia.nombreProducto || 'Referencia';
-  await sendMail({
+  await resend.emails.send({
+    from: `Referencias Granel <${FROM}>`,
+    to: TO,
     subject: `Nuevo comentario en: ${nombre}`,
     html: baseHtml({
       title: 'Nuevo comentario',
