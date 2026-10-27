@@ -1,73 +1,62 @@
 const express = require('express');
 const router = express.Router();
 const { getReferencias } = require('../services/sharepointService');
-const { initTable, getSnapshots, upsertSnapshots } = require('../services/snapshotService');
+const { makeClient, initTable, getSnapshots, upsertSnapshots } = require('../services/snapshotService');
 const {
   sendNuevaReferencia, sendCambioEstado,
   sendEnlaceActualizado, sendNRefAsignado, sendActualizacionGeneral,
 } = require('../services/emailService');
 
-// Protege el endpoint con un secret para que no sea público
-function checkSecret(req, res) {
+function checkSecret(req) {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // si no hay secret configurado, permite (entorno dev)
+  if (!secret) return true;
   const auth = req.headers.authorization || '';
   return auth === `Bearer ${secret}`;
 }
 
-// Los campos que generan un email específico si cambian
-const WATCHED_FIELDS = {
-  estado:       'estado',
-  enlaces:      'enlace',
-  nRefAsignado: 'nref',
-};
-
-// Campos que si cambian generan un email genérico de actualización
 const GENERAL_FIELDS = [
   'nombreProducto', 'nombreComercial', 'tipoProducto', 'categoria',
   'tipoFragancia', 'proveedor', 'nombreCliente', 'peticionFechaLanzamiento',
   'muestrasLaboratorio', 'notasLaboratorio',
 ];
 
-// GET /api/cron/check-changes
-// Llamado por Vercel Cron (o un servicio externo tipo cron-job.org)
 router.get('/check-changes', async (req, res) => {
-  if (!checkSecret(req, res)) {
+  if (!checkSecret(req)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-
   if (!process.env.DATABASE_URL) {
     return res.status(503).json({ error: 'DATABASE_URL no configurada en variables de entorno' });
   }
 
+  // Un único cliente por ejecución — se abre y se cierra siempre
+  const client = makeClient();
+  await client.connect();
+
   const log = [];
   try {
-    await initTable();
+    await initTable(client);
     const [current, snapshots] = await Promise.all([
       getReferencias(),
-      getSnapshots(),
+      getSnapshots(client),
     ]);
 
-    const emailTasks = [];
-
-    // Si el snapshot estaba vacío es la primera ejecución — solo guardar, sin emails
-    const isFirstRun = snapshots.size === 0;
-    if (isFirstRun) {
-      await upsertSnapshots(current);
-      return res.json({ ok: true, checked: current.length, changes: ['Primera ejecución: snapshot inicial guardado'], emailErrors: undefined });
+    // Primera ejecución: solo guardar snapshot sin emails
+    if (snapshots.size === 0) {
+      await upsertSnapshots(client, current);
+      return res.json({ ok: true, checked: current.length, changes: ['Primera ejecución: snapshot inicial guardado'] });
     }
+
+    const emailTasks = [];
 
     for (const ref of current) {
       const prev = snapshots.get(ref._sheetRow);
 
       if (!prev) {
-        // Referencia nueva (añadida después del primer snapshot)
         log.push(`NUEVA: ${ref.nombreProducto} (fila ${ref._sheetRow})`);
         emailTasks.push(sendNuevaReferencia(ref));
         continue;
       }
 
-      // ── Cambios en campos vigilados ──────────────────────────────────────
       const estadoNuevo = (ref.estado || '').trim().toUpperCase();
       const estadoAnterior = (prev.estado || '').trim().toUpperCase();
       if (estadoNuevo !== estadoAnterior) {
@@ -89,7 +78,6 @@ router.get('/check-changes', async (req, res) => {
         emailTasks.push(sendNRefAsignado(ref, nRefNuevo));
       }
 
-      // ── Otros cambios → email genérico ──────────────────────────────────
       const otrosCambios = GENERAL_FIELDS
         .filter(f => (ref[f] || '') !== (prev[f] || ''))
         .map(f => ({ campo: f, antes: prev[f] || '—', despues: ref[f] || '—' }));
@@ -100,10 +88,9 @@ router.get('/check-changes', async (req, res) => {
       }
     }
 
-    // Enviar todos los emails y actualizar snapshots en paralelo
     const [emailResults] = await Promise.allSettled([
       Promise.allSettled(emailTasks),
-      upsertSnapshots(current),
+      upsertSnapshots(client, current),
     ]);
 
     const emailErrors = (emailResults.value || [])
@@ -119,6 +106,8 @@ router.get('/check-changes', async (req, res) => {
   } catch (err) {
     console.error('[cron/check-changes]', err.message);
     res.status(500).json({ ok: false, error: err.message });
+  } finally {
+    await client.end().catch(() => {});
   }
 });
 

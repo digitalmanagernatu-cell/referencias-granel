@@ -1,24 +1,17 @@
-const { Pool } = require('pg');
+const { Client } = require('pg');
 
-let pool = null;
-
-function getPool() {
-  if (!pool) {
-    if (!process.env.DATABASE_URL) {
-      throw new Error('DATABASE_URL no configurada');
-    }
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-      max: 3,
-    });
+function makeClient() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL no configurada');
   }
-  return pool;
+  return new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+  });
 }
 
-async function initTable() {
-  const db = getPool();
-  await db.query(`
+async function initTable(client) {
+  await client.query(`
     CREATE TABLE IF NOT EXISTS referencias_snapshot (
       sheet_row   INTEGER PRIMARY KEY,
       data        JSONB    NOT NULL,
@@ -28,24 +21,21 @@ async function initTable() {
 }
 
 // Returns a Map<sheetRow, dataObject>
-async function getSnapshots() {
-  const db = getPool();
-  const { rows } = await db.query('SELECT sheet_row, data FROM referencias_snapshot');
+async function getSnapshots(client) {
+  const { rows } = await client.query('SELECT sheet_row, data FROM referencias_snapshot');
   const map = new Map();
   rows.forEach(r => map.set(r.sheet_row, r.data));
   return map;
 }
 
-// Batch upsert: replace all snapshots for the given rows
-async function upsertSnapshots(referencias) {
+// Batch upsert
+async function upsertSnapshots(client, referencias) {
   if (!referencias.length) return;
-  const db = getPool();
-  // Build VALUES list
-  const values = referencias.map((ref, i) =>
+  const values = referencias.map((_, i) =>
     `($${i * 2 + 1}, $${i * 2 + 2}::jsonb)`
   ).join(', ');
   const params = referencias.flatMap(ref => [ref._sheetRow, JSON.stringify(ref)]);
-  await db.query(`
+  await client.query(`
     INSERT INTO referencias_snapshot (sheet_row, data, updated_at)
     VALUES ${values}
     ON CONFLICT (sheet_row) DO UPDATE
@@ -53,4 +43,4 @@ async function upsertSnapshots(referencias) {
   `, params);
 }
 
-module.exports = { initTable, getSnapshots, upsertSnapshots };
+module.exports = { makeClient, initTable, getSnapshots, upsertSnapshots };
