@@ -3,10 +3,56 @@ const fs = require('fs');
 const path = require('path');
 
 const FROM = process.env.EMAIL_FROM || 'noreply@natulaboratories.es';
-const TO = (process.env.EMAIL_TO || 'digitalmanager@natuaromatic.com')
-  .split(',')
-  .map((e) => e.trim())
-  .filter(Boolean);
+
+function parseEmails(str) {
+  return (str || '').split(',').map(e => e.trim()).filter(Boolean);
+}
+
+// Grupos de destinatarios — configurables por env vars con fallback a EMAIL_TO
+const TO_ALL      = parseEmails(process.env.EMAIL_TO || 'digitalmanager@natuaromatic.com');
+const TO_COMERCIAL = parseEmails(process.env.EMAIL_TO_COMERCIAL || process.env.EMAIL_TO || 'digitalmanager@natuaromatic.com');
+const TO_CALIDAD   = parseEmails(process.env.EMAIL_TO_CALIDAD   || process.env.EMAIL_TO || 'digitalmanager@natuaromatic.com');
+
+// Emails individuales del equipo comercial (para excluir al autor y avisar a sus compañeros)
+const COMERCIAL_MAP = {
+  'toni':  'antoniofuentes@natuaromatic.com',
+  'mauro': 'export4@natuaromatic.com',
+  'jaime': 'jaime@natuaromatic.com',
+};
+const NOMBRES_LAB = ['laboratorio'];
+
+// Comercial minus el autor = los otros dos compañeros
+function otrosComerciales(autor) {
+  const n = autor.trim().toLowerCase();
+  return Object.entries(COMERCIAL_MAP)
+    .filter(([k]) => k !== n)
+    .map(([, email]) => email);
+}
+
+// Nueva referencia:
+//   comercial sube → calidad + los otros dos comerciales
+//   lab sube       → comercial completo
+//   otro           → todos
+function recipientsNuevaRef(nombreComercial) {
+  const n = (nombreComercial || '').trim().toLowerCase();
+  if (COMERCIAL_MAP[n]) return [...TO_CALIDAD, ...otrosComerciales(n)];
+  if (NOMBRES_LAB.includes(n)) return TO_COMERCIAL;
+  return TO_ALL;
+}
+
+// Cambio de estado:
+//   lab cambia              → avisar a comercial
+//   comercial descarta      → avisar a calidad
+//   comercial otro estado   → sin email
+//   desconocido             → todos
+function recipientsCambioEstado(nombreComercial, estadoNuevo) {
+  const n = (nombreComercial || '').trim().toLowerCase();
+  const descartado = (estadoNuevo || '').trim().toUpperCase() === 'DESCARTADO';
+  if (NOMBRES_LAB.includes(n))                     return TO_COMERCIAL;
+  if (COMERCIAL_MAP[n] && descartado)              return TO_CALIDAD;
+  if (COMERCIAL_MAP[n] && !descartado)             return [];
+  return TO_ALL;
+}
 
 // Logo embebido en base64 para compatibilidad con todos los clientes de email
 let LOGO_B64 = '';
@@ -86,15 +132,17 @@ function refTable(ref) {
     </table>`;
 }
 
-async function sendMail({ subject, html }) {
+async function sendMail({ subject, html, to }) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
     return;
   }
+  const recipients = (to && to.length) ? to : TO_ALL;
+  if (!recipients.length) return;
   await axios.post(
     'https://api.resend.com/emails',
-    { from: `Referencias Granel <${FROM}>`, to: TO, subject, html },
+    { from: `Referencias Granel <${FROM}>`, to: recipients, subject, html },
     { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } }
   );
 }
@@ -103,6 +151,7 @@ async function sendNuevaReferencia(referencia) {
   const nombre = referencia.nombreProducto || 'Nueva referencia';
   await sendMail({
     subject: `Nueva solicitud de referencia: ${nombre}`,
+    to: recipientsNuevaRef(referencia.nombreComercial),
     html: baseHtml({
       title: 'Nueva solicitud de referencia',
       accentColor: '#2563eb',
@@ -136,9 +185,12 @@ async function sendNRefAsignado(referencia, nRef) {
 }
 
 async function sendCambioEstado(referencia, estadoAnterior, estadoNuevo) {
+  const to = recipientsCambioEstado(referencia.nombreComercial, estadoNuevo);
+  if (!to.length) return; // este cambio no requiere notificación
   const nombre = referencia.nombreProducto || 'Referencia';
   await sendMail({
     subject: `Cambio de estado: ${nombre} → ${estadoNuevo}`,
+    to,
     html: baseHtml({
       title: 'Cambio de estado',
       accentColor: '#7c3aed',
