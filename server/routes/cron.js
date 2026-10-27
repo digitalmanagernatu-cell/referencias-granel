@@ -28,12 +28,10 @@ router.get('/check-changes', async (req, res) => {
     return res.status(503).json({ error: 'DATABASE_URL no configurada en variables de entorno' });
   }
 
-  // Un único cliente por ejecución — se abre y se cierra siempre
-  const client = makeClient();
-  await client.connect();
-
   const log = [];
+  const client = makeClient();
   try {
+    await client.connect();
     await initTable(client);
     const [current, snapshots] = await Promise.all([
       getReferencias(),

@@ -4,8 +4,12 @@ function makeClient() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL no configurada');
   }
+  // El driver pg de Node.js no soporta channel_binding — lo eliminamos
+  const url = process.env.DATABASE_URL
+    .replace(/([?&])channel_binding=[^&]*/g, '$1')
+    .replace(/[?&]$/, '');
   return new Client({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: url,
     ssl: { rejectUnauthorized: false },
   });
 }
