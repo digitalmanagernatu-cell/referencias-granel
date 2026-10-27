@@ -36,6 +36,10 @@ router.get('/check-changes', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  if (!process.env.DATABASE_URL) {
+    return res.status(503).json({ error: 'DATABASE_URL no configurada en variables de entorno' });
+  }
+
   const log = [];
   try {
     await initTable();
