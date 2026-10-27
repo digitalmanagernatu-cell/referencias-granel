@@ -106,6 +106,26 @@
   border-color: #cbd5e1;
 }
 
+.btn-estado-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  margin-left: 6px;
+  vertical-align: middle;
+  transition: color 0.15s, background 0.15s;
+}
+.btn-estado-edit:hover {
+  color: var(--color-accent);
+  background: var(--color-bg);
+}
+
 .btn-nref-edit {
   display: inline-flex;
   align-items: center;

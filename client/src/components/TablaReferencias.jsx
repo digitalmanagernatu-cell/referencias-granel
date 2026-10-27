@@ -26,7 +26,7 @@ const IconPlus = () => (
   </svg>
 );
 
-export default function TablaReferencias({ referencias, onVerDetalles, onFilterClick, activeFilters = {}, onAddEnlace, onEditNRef }) {
+export default function TablaReferencias({ referencias, onVerDetalles, onFilterClick, activeFilters = {}, onAddEnlace, onEditNRef, onEditEstado }) {
   if (referencias.length === 0) return null;
 
   const handleTipo = (tipoProducto) => {
@@ -129,6 +129,14 @@ export default function TablaReferencias({ referencias, onVerDetalles, onFilterC
                   >
                     {getEstadoLabel(ref.estado)}
                   </span>
+                  <button
+                    className="btn-estado-edit"
+                    onClick={() => onEditEstado && onEditEstado(ref)}
+                    title="Cambiar estado"
+                    aria-label="Cambiar estado"
+                  >
+                    <IconPencil />
+                  </button>
                 </td>
                 <td className="td-actions">
                   {hasEnlace ? (

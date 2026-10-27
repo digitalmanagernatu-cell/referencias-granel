@@ -755,6 +755,81 @@ async function updateNRef(sheetRow, nRef) {
 }
 
 /**
+ * Updates a single cell (column N – estado) for an existing row.
+ * @param {number} sheetRow  1-based Excel row number (from referencia._sheetRow)
+ * @param {string} estado    New estado value to write
+ */
+async function updateEstado(sheetRow, estado) {
+  const estadoIdx = COLUMNS.indexOf('estado'); // 13 → column N
+  const colLetter = String.fromCharCode(65 + estadoIdx);
+  const address = `${colLetter}${sheetRow}`;
+
+  try {
+    const token = await getAccessToken();
+    const workbookBase = await resolveWorkbookBase(token);
+    const base = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
+
+    let sessionId = null;
+    try {
+      const res = await axios.post(
+        graphUrl(`${workbookBase}/createSession`),
+        { persistChanges: true },
+        { headers: base }
+      );
+      sessionId = res.data.id;
+    } catch (err) {
+      const status = err.response && err.response.status;
+      if (status === 423 || status === 403) {
+        console.warn('[updateEstado] createSession failed (%d) – sessionless', status);
+      } else {
+        throw err;
+      }
+    }
+
+    const reqHeaders = sessionId ? { ...base, 'workbook-session-id': sessionId } : base;
+
+    async function closeSession() {
+      if (!sessionId) return;
+      try { await axios.post(graphUrl(`${workbookBase}/closeSession`), {}, { headers: reqHeaders }); }
+      catch (_) { /* best-effort */ }
+    }
+
+    try {
+      await withRetry(
+        () => axios.patch(
+          graphUrl(`${sheetBase}/range(address='${address}')`),
+          { values: [[estado]] },
+          { headers: reqHeaders }
+        ),
+        'updateEstado', 4, 500
+      );
+      await closeSession();
+      return;
+    } catch (err) {
+      await closeSession();
+      throw err;
+    }
+  } catch (workbookErr) {
+    const status = workbookErr.response && workbookErr.response.status;
+    if (status !== 403 && status !== 401) throw workbookErr;
+    console.warn('[updateEstado] Workbook API bloqueada (%d) – fallback ExcelJS', status);
+  }
+
+  const buffer = await downloadExcel();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const ws = wb.getWorksheet(SHEET_NAME);
+  if (!ws) throw new Error(`Hoja "${SHEET_NAME}" no encontrada`);
+
+  const estadoIdx2 = COLUMNS.indexOf('estado');
+  ws.getCell(sheetRow, estadoIdx2 + 1).value = estado || null;
+
+  const newBuffer = await wb.xlsx.writeBuffer();
+  await uploadExcel(Buffer.from(newBuffer));
+}
+
+/**
  * Step-by-step diagnostic: tests token, site, drives, file access, and download.
  */
 async function diagnose() {
@@ -915,4 +990,4 @@ async function diagnose() {
   return result;
 }
 
-module.exports = { getReferencias, addReferencia, updateEnlace, updateNRef, diagnose, getTokenPermissions };
+module.exports = { getReferencias, addReferencia, updateEnlace, updateNRef, updateEstado, diagnose, getTokenPermissions };

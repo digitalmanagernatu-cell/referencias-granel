@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { getReferencias, addReferencia, updateEnlace, updateNRef } = require('../services/sharepointService');
-const { sendNuevaReferencia } = require('../services/emailService');
+const { getReferencias, addReferencia, updateEnlace, updateNRef, updateEstado } = require('../services/sharepointService');
+const { sendNuevaReferencia, sendEnlaceActualizado, sendNRefAsignado, sendCambioEstado } = require('../services/emailService');
+
+const ESTADOS_VALIDOS = ['APROBADO', 'DESCARTADO', 'EVALUANDO', 'PENDIENTE', 'RECHAZADO', 'TESTANDO'];
 
 // ─── GET /api/referencias ──────────────────────────────────────────────────
-// Devuelve todas las referencias desde la fila 56 del Excel en SharePoint.
 router.get('/', async (req, res, next) => {
   try {
     const referencias = await getReferencias();
@@ -16,75 +17,43 @@ router.get('/', async (req, res, next) => {
 });
 
 // ─── POST /api/referencias ─────────────────────────────────────────────────
-// Añade una nueva referencia al Excel.
-// Body esperado (JSON):
-// {
-//   nombreComercial, tipoProducto, tipoFragancia, categoria, nombreProducto,
-//   nombreCliente?, peticionFechaLanzamiento?, proveedor?, enlaces?
-// }
 router.post('/', async (req, res, next) => {
   try {
     const {
-      nombreComercial,
-      tipoProducto,
-      tipoFragancia,
-      categoria,
-      nombreProducto,
-      nombreCliente = '',
-      peticionFechaLanzamiento = '',
-      proveedor = '',
-      enlaces = '',
+      nombreComercial, tipoProducto, tipoFragancia, categoria, nombreProducto,
+      nombreCliente = '', peticionFechaLanzamiento = '', proveedor = '', enlaces = '',
     } = req.body;
 
-    // Validate required fields
     if (!nombreComercial || !tipoProducto || !tipoFragancia || !categoria || !nombreProducto) {
       return res.status(400).json({
         success: false,
         error: 'Faltan campos obligatorios: nombreComercial, tipoProducto, tipoFragancia, categoria, nombreProducto',
       });
     }
-
-    // If tipo is Exclusiva, nombreCliente is required (form sends uppercase EXCLUSIVA)
     if ((tipoProducto || '').toUpperCase() === 'EXCLUSIVA' && !nombreCliente) {
-      return res.status(400).json({
-        success: false,
-        error: 'Para tipo Exclusiva, el nombre del cliente es obligatorio',
-      });
+      return res.status(400).json({ success: false, error: 'Para tipo Exclusiva, el nombre del cliente es obligatorio' });
     }
 
     const now = new Date();
     const today = [
-      String(now.getMonth() + 1).padStart(2, '0'),  // MM  (Excel SharePoint usa locale US)
-      String(now.getDate()).padStart(2, '0'),          // DD
-      now.getFullYear(),                               // YYYY
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+      now.getFullYear(),
     ].join('/');
 
     const newReferencia = {
-      numero: '',                      // A - Asignado por Natu
-      nombreComercial,                 // B
-      tipoProducto,                    // C
-      tipoFragancia,                   // D - FEMENINO / MASCULINO / UNISEX
-      categoria,                       // E
-      nombreProducto,                  // F
-      nRefAsignado: '',                // G - Asignado por Natu
-      nombreCliente,                   // H
-      peticionFechaLanzamiento,        // I
-      fechaSolicitudComercial: today,  // J - Fecha actual
-      proveedor,                       // K
-      fechaSolicitudProveedor: '',     // L
-      fechaLlegadaPropuesta: '',       // M
-      estado: '',                      // N - se sobreescribirá con PENDIENTE en addReferencia
-      fechaValidacionNatu: '',         // O
-      muestrasLaboratorio: '',         // P
-      enlaces,                         // Q
+      numero: '', nombreComercial, tipoProducto, tipoFragancia, categoria, nombreProducto,
+      nRefAsignado: '', nombreCliente, peticionFechaLanzamiento,
+      fechaSolicitudComercial: today, proveedor,
+      fechaSolicitudProveedor: '', fechaLlegadaPropuesta: '', estado: '',
+      fechaValidacionNatu: '', muestrasLaboratorio: '', enlaces,
     };
 
     const result = await addReferencia(newReferencia);
     res.status(201).json({ success: true, data: result });
 
-    // Enviar email en segundo plano — no bloquea la respuesta al cliente
     sendNuevaReferencia(result).catch((e) =>
-      console.error('[email] Error enviando aviso nueva referencia:', e.message)
+      console.error('[email] nueva referencia:', e.message)
     );
   } catch (err) {
     console.error('[POST /api/referencias]', err.message);
@@ -96,19 +65,24 @@ router.post('/', async (req, res, next) => {
 });
 
 // ─── PATCH /api/referencias/:sheetRow/enlace ───────────────────────────────
-// Updates the Fragrantica URL (column Q) for an existing row.
 router.patch('/:sheetRow/enlace', async (req, res, next) => {
   try {
     const sheetRow = parseInt(req.params.sheetRow, 10);
     if (isNaN(sheetRow) || sheetRow < 1) {
       return res.status(400).json({ success: false, error: 'sheetRow inválido' });
     }
-    const { enlace } = req.body;
+    const { enlace, referencia } = req.body;
     if (!enlace || !enlace.trim()) {
       return res.status(400).json({ success: false, error: 'El campo enlace es obligatorio' });
     }
     await updateEnlace(sheetRow, enlace.trim());
     res.json({ success: true });
+
+    if (referencia) {
+      sendEnlaceActualizado({ ...referencia, enlaces: enlace.trim() }).catch((e) =>
+        console.error('[email] enlace actualizado:', e.message)
+      );
+    }
   } catch (err) {
     console.error('[PATCH /api/referencias/:sheetRow/enlace]', err.message);
     next(err);
@@ -116,21 +90,55 @@ router.patch('/:sheetRow/enlace', async (req, res, next) => {
 });
 
 // ─── PATCH /api/referencias/:sheetRow/nref ─────────────────────────────────
-// Updates the reference number (column G) for an existing row.
 router.patch('/:sheetRow/nref', async (req, res, next) => {
   try {
     const sheetRow = parseInt(req.params.sheetRow, 10);
     if (isNaN(sheetRow) || sheetRow < 1) {
       return res.status(400).json({ success: false, error: 'sheetRow inválido' });
     }
-    const { nRef } = req.body;
+    const { nRef, referencia } = req.body;
     if (!nRef || !nRef.trim()) {
       return res.status(400).json({ success: false, error: 'El campo nRef es obligatorio' });
     }
     await updateNRef(sheetRow, nRef.trim());
     res.json({ success: true });
+
+    if (referencia) {
+      sendNRefAsignado(referencia, nRef.trim()).catch((e) =>
+        console.error('[email] nRef asignado:', e.message)
+      );
+    }
   } catch (err) {
     console.error('[PATCH /api/referencias/:sheetRow/nref]', err.message);
+    next(err);
+  }
+});
+
+// ─── PATCH /api/referencias/:sheetRow/estado ───────────────────────────────
+router.patch('/:sheetRow/estado', async (req, res, next) => {
+  try {
+    const sheetRow = parseInt(req.params.sheetRow, 10);
+    if (isNaN(sheetRow) || sheetRow < 1) {
+      return res.status(400).json({ success: false, error: 'sheetRow inválido' });
+    }
+    const { estado, estadoAnterior, referencia } = req.body;
+    const estadoNorm = (estado || '').trim().toUpperCase();
+    if (!estadoNorm || !ESTADOS_VALIDOS.includes(estadoNorm)) {
+      return res.status(400).json({
+        success: false,
+        error: `Estado inválido. Valores permitidos: ${ESTADOS_VALIDOS.join(', ')}`,
+      });
+    }
+    await updateEstado(sheetRow, estadoNorm);
+    res.json({ success: true });
+
+    if (referencia) {
+      sendCambioEstado(referencia, estadoAnterior || '', estadoNorm).catch((e) =>
+        console.error('[email] cambio estado:', e.message)
+      );
+    }
+  } catch (err) {
+    console.error('[PATCH /api/referencias/:sheetRow/estado]', err.message);
     next(err);
   }
 });

@@ -26,7 +26,7 @@ export default function EnlaceModal({ referencia, onClose, onSuccess }) {
       const res = await fetch(`${API_BASE}/api/referencias/${referencia._sheetRow}/enlace`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enlace: trimmed }),
+        body: JSON.stringify({ enlace: trimmed, referencia }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar el enlace');

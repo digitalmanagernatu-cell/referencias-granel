@@ -37,7 +37,7 @@ export default function NRefModal({ referencia, onClose, onSuccess }) {
       const res = await fetch(`${API_BASE}/api/referencias/${referencia._sheetRow}/nref`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nRef: trimmed }),
+        body: JSON.stringify({ nRef: trimmed, referencia }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar');

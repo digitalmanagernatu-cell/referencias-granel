@@ -111,6 +111,30 @@ async function sendNuevaReferencia(referencia) {
   });
 }
 
+async function sendEnlaceActualizado(referencia) {
+  const nombre = referencia.nombreProducto || 'Referencia';
+  await sendMail({
+    subject: `Enlace Fragrantica añadido: ${nombre}`,
+    html: baseHtml({
+      title: 'Enlace Fragrantica añadido',
+      accentColor: '#0284c7',
+      body: `<p style="margin:0;color:#374151;font-size:14px">Se ha añadido un enlace de Fragrantica a una referencia.</p>${refTable(referencia)}`,
+    }),
+  });
+}
+
+async function sendNRefAsignado(referencia, nRef) {
+  const nombre = referencia.nombreProducto || 'Referencia';
+  await sendMail({
+    subject: `Nº Ref asignado: ${nRef} — ${nombre}`,
+    html: baseHtml({
+      title: 'Nº Referencia asignado',
+      accentColor: '#059669',
+      body: `<p style="margin:0;color:#374151;font-size:14px">Se ha asignado el número de referencia <strong>${nRef}</strong> a una solicitud.</p>${refTable({ ...referencia, nRefAsignado: nRef })}`,
+    }),
+  });
+}
+
 async function sendCambioEstado(referencia, estadoAnterior, estadoNuevo) {
   const nombre = referencia.nombreProducto || 'Referencia';
   await sendMail({
@@ -135,4 +159,4 @@ async function sendNuevoComentario(referencia, comentario) {
   });
 }
 
-module.exports = { sendNuevaReferencia, sendCambioEstado, sendNuevoComentario };
+module.exports = { sendNuevaReferencia, sendEnlaceActualizado, sendNRefAsignado, sendCambioEstado, sendNuevoComentario };
