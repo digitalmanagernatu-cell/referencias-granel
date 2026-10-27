@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getReferencias, addReferencia, updateEnlace, updateNRef } = require('../services/sharepointService');
+const { sendNuevaReferencia } = require('../services/emailService');
 
 // ─── GET /api/referencias ──────────────────────────────────────────────────
 // Devuelve todas las referencias desde la fila 56 del Excel en SharePoint.
@@ -80,6 +81,11 @@ router.post('/', async (req, res, next) => {
 
     const result = await addReferencia(newReferencia);
     res.status(201).json({ success: true, data: result });
+
+    // Enviar email en segundo plano — no bloquea la respuesta al cliente
+    sendNuevaReferencia(result).catch((e) =>
+      console.error('[email] Error enviando aviso nueva referencia:', e.message)
+    );
   } catch (err) {
     console.error('[POST /api/referencias]', err.message);
     if (err.code === 'DUPLICATE') {
