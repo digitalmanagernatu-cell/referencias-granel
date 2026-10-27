@@ -109,6 +109,17 @@ router.get('/check-changes', async (req, res) => {
   }
 });
 
+// GET /api/cron/auth-test — muestra qué Authorization recibe el servidor vs CRON_SECRET
+router.get('/auth-test', (req, res) => {
+  const received = req.headers.authorization || '(vacío)';
+  const secret = process.env.CRON_SECRET || '(no configurado)';
+  res.json({
+    received,
+    expected: `Bearer ${secret}`,
+    match: received === `Bearer ${secret}`,
+  });
+});
+
 // GET /api/cron/db-test — diagnóstico de conexión a Neon (sin autenticación)
 router.get('/db-test', async (req, res) => {
   if (!process.env.DATABASE_URL) {
