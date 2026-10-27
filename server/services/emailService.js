@@ -159,4 +159,34 @@ async function sendNuevoComentario(referencia, comentario) {
   });
 }
 
-module.exports = { sendNuevaReferencia, sendEnlaceActualizado, sendNRefAsignado, sendCambioEstado, sendNuevoComentario };
+async function sendActualizacionGeneral(referencia, cambios) {
+  const nombre = referencia.nombreProducto || 'Referencia';
+  const camposHtml = cambios.map(c => `
+    <tr>
+      <td style="padding:6px 12px;color:#6b7280;font-size:13px;white-space:nowrap">${c.campo}</td>
+      <td style="padding:6px 12px;color:#dc2626;font-size:13px;text-decoration:line-through">${c.antes}</td>
+      <td style="padding:6px 12px;color:#16a34a;font-size:13px">${c.despues}</td>
+    </tr>`).join('');
+  await sendMail({
+    subject: `Actualización en referencia: ${nombre}`,
+    html: baseHtml({
+      title: 'Referencia actualizada',
+      accentColor: '#d97706',
+      body: `
+        <p style="margin:0;color:#374151;font-size:14px">Se han modificado campos de una referencia.</p>
+        <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-top:16px">
+          <thead>
+            <tr style="background:#f9fafb">
+              <th style="padding:8px 12px;text-align:left;font-size:12px;color:#6b7280;font-weight:600">Campo</th>
+              <th style="padding:8px 12px;text-align:left;font-size:12px;color:#6b7280;font-weight:600">Antes</th>
+              <th style="padding:8px 12px;text-align:left;font-size:12px;color:#6b7280;font-weight:600">Ahora</th>
+            </tr>
+          </thead>
+          <tbody>${camposHtml}</tbody>
+        </table>
+        ${refTable(referencia)}`,
+    }),
+  });
+}
+
+module.exports = { sendNuevaReferencia, sendEnlaceActualizado, sendNRefAsignado, sendCambioEstado, sendNuevoComentario, sendActualizacionGeneral };

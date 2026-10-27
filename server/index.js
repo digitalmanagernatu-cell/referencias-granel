@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const referenciasRouter = require('./routes/referencias');
+const cronRouter = require('./routes/cron');
 const { diagnose, getTokenPermissions } = require('./services/sharepointService');
 
 const app = express();
@@ -58,6 +59,7 @@ app.get('/api/permissions', async (req, res) => {
 
 // Routes
 app.use('/api/referencias', referenciasRouter);
+app.use('/api/cron', cronRouter);
 
 // Catch-all: servir React SPA — index.html nunca se cachea
 app.get('*', (req, res) => {
