@@ -1,6 +1,4 @@
-const { Resend } = require('resend');
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+const axios = require('axios');
 
 const FROM = process.env.EMAIL_FROM || 'noreply@natulaboratories.es';
 const TO = (process.env.EMAIL_TO || 'digitalmanager@natuaromatic.com')
@@ -31,14 +29,10 @@ function baseHtml({ title, color, icon, body }) {
             <p style="margin:6px 0 0;font-size:13px;color:rgba(255,255,255,.8)">Dashboard de Referencias Granel · NATU Lab</p>
           </td>
         </tr>
-        <tr>
-          <td style="padding:24px 32px 8px">
-            ${body}
-          </td>
-        </tr>
+        <tr><td style="padding:24px 32px 8px">${body}</td></tr>
         <tr>
           <td style="padding:16px 32px 24px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px">
-            Este es un aviso automático generado por el panel de Referencias Granel.
+            Aviso automático del panel de Referencias Granel.
           </td>
         </tr>
       </table>
@@ -65,76 +59,54 @@ function refTable(ref) {
     </table>`;
 }
 
-async function sendNuevaReferencia(referencia) {
-  if (!process.env.RESEND_API_KEY) {
+async function sendMail({ subject, html }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
     console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
     return;
   }
+  await axios.post(
+    'https://api.resend.com/emails',
+    { from: `Referencias Granel <${FROM}>`, to: TO, subject, html },
+    { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } }
+  );
+}
+
+async function sendNuevaReferencia(referencia) {
   const nombre = referencia.nombreProducto || 'Nueva referencia';
-  await resend.emails.send({
-    from: `Referencias Granel <${FROM}>`,
-    to: TO,
+  await sendMail({
     subject: `Nueva solicitud de referencia: ${nombre}`,
     html: baseHtml({
       title: 'Nueva solicitud de referencia',
       color: '#2563eb',
       icon: '📋',
-      body: `
-        <p style="margin:0;color:#374151;font-size:14px">
-          Se ha registrado una nueva solicitud de referencia en el panel.
-        </p>
-        ${refTable(referencia)}`,
+      body: `<p style="margin:0;color:#374151;font-size:14px">Se ha registrado una nueva solicitud de referencia en el panel.</p>${refTable(referencia)}`,
     }),
   });
 }
 
 async function sendCambioEstado(referencia, estadoAnterior, estadoNuevo) {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
-    return;
-  }
   const nombre = referencia.nombreProducto || 'Referencia';
-  await resend.emails.send({
-    from: `Referencias Granel <${FROM}>`,
-    to: TO,
+  await sendMail({
     subject: `Cambio de estado: ${nombre} → ${estadoNuevo}`,
     html: baseHtml({
       title: 'Cambio de estado',
       color: '#7c3aed',
       icon: '🔄',
-      body: `
-        <p style="margin:0;color:#374151;font-size:14px">
-          El estado de una referencia ha cambiado de
-          <strong>${estadoAnterior || 'Sin estado'}</strong>
-          a <strong>${estadoNuevo}</strong>.
-        </p>
-        ${refTable({ ...referencia, estado: estadoNuevo })}`,
+      body: `<p style="margin:0;color:#374151;font-size:14px">El estado ha cambiado de <strong>${estadoAnterior || 'Sin estado'}</strong> a <strong>${estadoNuevo}</strong>.</p>${refTable({ ...referencia, estado: estadoNuevo })}`,
     }),
   });
 }
 
 async function sendNuevoComentario(referencia, comentario) {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
-    return;
-  }
   const nombre = referencia.nombreProducto || 'Referencia';
-  await resend.emails.send({
-    from: `Referencias Granel <${FROM}>`,
-    to: TO,
+  await sendMail({
     subject: `Nuevo comentario en: ${nombre}`,
     html: baseHtml({
       title: 'Nuevo comentario',
       color: '#059669',
       icon: '💬',
-      body: `
-        <p style="margin:0;color:#374151;font-size:14px">
-          Se ha añadido un comentario a una referencia.
-        </p>
-        <blockquote style="margin:16px 0;padding:12px 16px;background:#f9fafb;border-left:4px solid #059669;border-radius:4px;color:#374151;font-size:14px">
-          ${comentario}
-        </blockquote>
-        ${refTable(referencia)}`,
+      body: `<p style="margin:0;color:#374151;font-size:14px">Se ha añadido un comentario a una referencia.</p><blockquote style="margin:16px 0;padding:12px 16px;background:#f9fafb;border-left:4px solid #059669;border-radius:4px;color:#374151;font-size:14px">${comentario}</blockquote>${refTable(referencia)}`,
     }),
   });
 }
