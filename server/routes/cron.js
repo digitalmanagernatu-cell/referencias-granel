@@ -109,4 +109,26 @@ router.get('/check-changes', async (req, res) => {
   }
 });
 
+// GET /api/cron/db-test — diagnóstico de conexión a Neon (sin autenticación)
+router.get('/db-test', async (req, res) => {
+  if (!process.env.DATABASE_URL) {
+    return res.json({ ok: false, error: 'DATABASE_URL no configurada' });
+  }
+  const rawUrl = process.env.DATABASE_URL;
+  const cleanUrl = rawUrl
+    .replace(/([?&])channel_binding=[^&]*/g, '$1')
+    .replace(/[?&]$/, '');
+  const { Client } = require('pg');
+  const client = new Client({ connectionString: cleanUrl, ssl: { rejectUnauthorized: false } });
+  try {
+    await client.connect();
+    const { rows } = await client.query('SELECT NOW() AS now');
+    res.json({ ok: true, time: rows[0].now, urlHasChannelBinding: rawUrl.includes('channel_binding') });
+  } catch (err) {
+    res.json({ ok: false, error: err.message, code: err.code });
+  } finally {
+    await client.end().catch(() => {});
+  }
+});
+
 module.exports = router;
