@@ -50,11 +50,18 @@ router.get('/check-changes', async (req, res) => {
 
     const emailTasks = [];
 
+    // Si el snapshot estaba vacío es la primera ejecución — solo guardar, sin emails
+    const isFirstRun = snapshots.size === 0;
+    if (isFirstRun) {
+      await upsertSnapshots(current);
+      return res.json({ ok: true, checked: current.length, changes: ['Primera ejecución: snapshot inicial guardado'], emailErrors: undefined });
+    }
+
     for (const ref of current) {
       const prev = snapshots.get(ref._sheetRow);
 
       if (!prev) {
-        // Referencia nueva
+        // Referencia nueva (añadida después del primer snapshot)
         log.push(`NUEVA: ${ref.nombreProducto} (fila ${ref._sheetRow})`);
         emailTasks.push(sendNuevaReferencia(ref));
         continue;
