@@ -40,7 +40,7 @@ async function upsertSnapshots(client, referencias) {
   ).join(', ');
   const params = referencias.flatMap(ref => [ref._sheetRow, JSON.stringify(ref)]);
   await client.query(`
-    INSERT INTO referencias_snapshot (sheet_row, data, updated_at)
+    INSERT INTO referencias_snapshot (sheet_row, data)
     VALUES ${values}
     ON CONFLICT (sheet_row) DO UPDATE
       SET data = EXCLUDED.data, updated_at = NOW()
