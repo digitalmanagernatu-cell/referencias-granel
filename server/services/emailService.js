@@ -40,18 +40,9 @@ function recipientsNuevaRef(nombreComercial) {
   return TO_ALL;
 }
 
-// Cambio de estado:
-//   lab cambia              → avisar a comercial
-//   comercial descarta      → avisar a calidad
-//   comercial otro estado   → sin email
-//   desconocido             → todos
-function recipientsCambioEstado(nombreComercial, estadoNuevo) {
-  const n = (nombreComercial || '').trim().toLowerCase();
-  const descartado = (estadoNuevo || '').trim().toUpperCase() === 'DESCARTADO';
-  if (NOMBRES_LAB.includes(n))                     return TO_COMERCIAL;
-  if (COMERCIAL_MAP[n] && descartado)              return TO_CALIDAD;
-  if (COMERCIAL_MAP[n] && !descartado)             return [];
-  return TO_ALL;
+// Cambio de estado → siempre avisar a todos (comercial + calidad)
+function recipientsCambioEstado() {
+  return [...new Set([...TO_COMERCIAL, ...TO_CALIDAD])];
 }
 
 // Logo embebido en base64 para compatibilidad con todos los clientes de email
@@ -185,8 +176,7 @@ async function sendNRefAsignado(referencia, nRef) {
 }
 
 async function sendCambioEstado(referencia, estadoAnterior, estadoNuevo) {
-  const to = recipientsCambioEstado(referencia.nombreComercial, estadoNuevo);
-  if (!to.length) return; // este cambio no requiere notificación
+  const to = recipientsCambioEstado();
   const nombre = referencia.nombreProducto || 'Referencia';
   await sendMail({
     subject: `Cambio de estado: ${nombre} → ${estadoNuevo}`,
