@@ -129,7 +129,9 @@ async function sendMail({ subject, html, to }) {
     console.warn('[emailService] RESEND_API_KEY no configurada — email omitido');
     return;
   }
-  const recipients = (to && to.length) ? to : TO_ALL;
+  // TO_ALL (EMAIL_TO) siempre incluido como monitor — digitalmanager recibe todo
+  const base = (to && to.length) ? to : TO_ALL;
+  const recipients = [...new Set([...base, ...TO_ALL])];
   if (!recipients.length) return;
   await axios.post(
     'https://api.resend.com/emails',
