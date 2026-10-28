@@ -204,6 +204,7 @@ async function sendNuevoComentario(referencia, comentario) {
 }
 
 async function sendActualizacionGeneral(referencia, cambios) {
+  const to = [...new Set([...TO_COMERCIAL, ...TO_CALIDAD])];
   const nombre = referencia.nombreProducto || 'Referencia';
   const camposHtml = cambios.map(c => `
     <tr>
@@ -213,6 +214,7 @@ async function sendActualizacionGeneral(referencia, cambios) {
     </tr>`).join('');
   await sendMail({
     subject: `Actualización en referencia: ${nombre}`,
+    to,
     html: baseHtml({
       title: 'Referencia actualizada',
       accentColor: '#d97706',
