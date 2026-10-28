@@ -55,6 +55,15 @@ router.get('/check-changes', async (req, res) => {
         continue;
       }
 
+      // Si la fecha de solicitud cambió, la fila fue reemplazada por una referencia diferente
+      const fechaActual   = (ref.fechaSolicitudComercial  || '').trim();
+      const fechaAnterior = (prev.fechaSolicitudComercial || '').trim();
+      if (fechaActual && fechaAnterior && fechaActual !== fechaAnterior) {
+        log.push(`NUEVA (fila reutilizada): ${ref.nombreProducto} (fila ${ref._sheetRow})`);
+        emailTasks.push(sendNuevaReferencia(ref));
+        continue;
+      }
+
       const estadoNuevo = (ref.estado || '').trim().toUpperCase();
       const estadoAnterior = (prev.estado || '').trim().toUpperCase();
       if (estadoNuevo !== estadoAnterior) {
