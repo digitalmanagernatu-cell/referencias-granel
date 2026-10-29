@@ -24,10 +24,10 @@ export default function App() {
   // Filters
   const [filters, setFilters] = useState({
     comercial: '',
-    tipoProducto: '',
+    tipoProducto: [],
     tipoFragancia: '',
     categoria: '',
-    estado: '',
+    estado: [],
     fechaDesde: '',
     fechaHasta: '',
   });
@@ -66,19 +66,18 @@ export default function App() {
     const result = referencias.filter((r) => {
       if (filters.comercial &&
         (r.nombreComercial || '').trim().toUpperCase() !== filters.comercial) return false;
-      if (filters.tipoProducto &&
-        (r.tipoProducto || '').trim().toUpperCase() !== filters.tipoProducto) return false;
+      if (filters.tipoProducto.length > 0 &&
+        !filters.tipoProducto.includes((r.tipoProducto || '').trim().toUpperCase())) return false;
       if (filters.tipoFragancia &&
         (r.tipoFragancia || '').trim().toUpperCase() !== filters.tipoFragancia) return false;
       if (filters.categoria &&
         (r.categoria || '').trim().toUpperCase() !== filters.categoria) return false;
-      if (filters.estado) {
+      if (filters.estado.length > 0) {
         const estado = r.estado?.trim() || '';
-        if (filters.estado === 'SIN_ESTADO') {
-          if (estado !== '') return false;
-        } else {
-          if (estado.toUpperCase() !== filters.estado.toUpperCase()) return false;
-        }
+        const match = filters.estado.some((s) =>
+          s === 'SIN_ESTADO' ? estado === '' : estado.toUpperCase() === s.toUpperCase()
+        );
+        if (!match) return false;
       }
       if (filters.fechaDesde || filters.fechaHasta) {
         const fecha = parseDate(r.fechaSolicitudComercial);
@@ -107,12 +106,22 @@ export default function App() {
   }, [refetch]);
 
   const clearFilters = () =>
-    setFilters({ comercial: '', tipoProducto: '', tipoFragancia: '', categoria: '', estado: '', fechaDesde: '', fechaHasta: '' });
+    setFilters({ comercial: '', tipoProducto: [], tipoFragancia: '', categoria: '', estado: [], fechaDesde: '', fechaHasta: '' });
 
-  const handleFilterClick = (key, value) =>
-    setFilters(prev => ({ ...prev, [key]: prev[key] === value ? '' : value }));
+  const handleFilterClick = (key, value) => {
+    if (key === 'tipoProducto' || key === 'estado') {
+      setFilters(prev => {
+        const arr = prev[key];
+        return { ...prev, [key]: arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value] };
+      });
+    } else {
+      setFilters(prev => ({ ...prev, [key]: prev[key] === value ? '' : value }));
+    }
+  };
 
-  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+  const activeFilterCount = Object.entries(filters).filter(([, v]) =>
+    Array.isArray(v) ? v.length > 0 : Boolean(v)
+  ).length;
 
   return (
     <div className="app">

@@ -1,6 +1,67 @@
+import { useState, useRef, useEffect } from 'react';
 import './FilterBar.css';
 
-const ESTADOS_FIJOS = ['APROBADO', 'DESCARTADO', 'EVALUANDO', 'PENDIENTE', 'RECHAZADO', 'TESTANDO'];
+const ESTADOS_FIJOS = ['APROBADO', 'DESCARTADO', 'EVALUANDO', 'PENDIENTE', 'RECHAZADO', 'TESTANDO', 'SIN_ESTADO'];
+
+function displayLabel(v) {
+  return v === 'SIN_ESTADO' ? 'Sin estado' : v;
+}
+
+function MultiSelect({ id, options, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggle = (opt) => {
+    onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
+  };
+
+  const summaryText =
+    value.length === 0
+      ? 'Todos'
+      : value.length === 1
+      ? displayLabel(value[0])
+      : `${value.length} seleccionados`;
+
+  return (
+    <div className="multiselect-wrapper" ref={ref}>
+      <button
+        type="button"
+        id={id}
+        className={`filter-control multiselect-btn${value.length > 0 ? ' multiselect-active' : ''}`}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
+        <span className="multiselect-summary">{summaryText}</span>
+        <svg width="12" height="8" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+          <path d="M1 1L6 7L11 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="multiselect-dropdown" role="listbox" aria-multiselectable="true">
+          {options.map((opt) => (
+            <label key={opt} className={`multiselect-option${value.includes(opt) ? ' selected' : ''}`}>
+              <input
+                type="checkbox"
+                checked={value.includes(opt)}
+                onChange={() => toggle(opt)}
+              />
+              {displayLabel(opt)}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function FilterBar({ filters, setFilters, opciones, onClear, activeCount }) {
   const update = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
@@ -8,7 +69,7 @@ export default function FilterBar({ filters, setFilters, opciones, onClear, acti
   return (
     <div className="filterbar">
       <div className="filterbar-grid">
-        {/* Comercial */}
+        {/* Solicitante */}
         <div className="filter-group">
           <label className="filter-label" htmlFor="f-comercial">Solicitante</label>
           <select
@@ -24,20 +85,15 @@ export default function FilterBar({ filters, setFilters, opciones, onClear, acti
           </select>
         </div>
 
-        {/* Tipo Producto */}
+        {/* Tipo Producto — multi-select */}
         <div className="filter-group">
           <label className="filter-label" htmlFor="f-tipo">Tipo de Producto</label>
-          <select
+          <MultiSelect
             id="f-tipo"
-            className="filter-control"
+            options={opciones.tipos}
             value={filters.tipoProducto}
-            onChange={(e) => update('tipoProducto', e.target.value)}
-          >
-            <option value="">Todos</option>
-            {opciones.tipos.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+            onChange={(v) => update('tipoProducto', v)}
+          />
         </div>
 
         {/* Tipo Fragancia */}
@@ -72,21 +128,15 @@ export default function FilterBar({ filters, setFilters, opciones, onClear, acti
           </select>
         </div>
 
-        {/* Estado */}
+        {/* Estado — multi-select */}
         <div className="filter-group">
           <label className="filter-label" htmlFor="f-estado">Estado</label>
-          <select
+          <MultiSelect
             id="f-estado"
-            className="filter-control"
+            options={ESTADOS_FIJOS}
             value={filters.estado}
-            onChange={(e) => update('estado', e.target.value)}
-          >
-            <option value="">Todos</option>
-            {ESTADOS_FIJOS.map((e) => (
-              <option key={e} value={e}>{e}</option>
-            ))}
-            <option value="SIN_ESTADO">Sin estado</option>
-          </select>
+            onChange={(v) => update('estado', v)}
+          />
         </div>
 
         {/* Fecha desde */}
