@@ -67,9 +67,9 @@ export default function TablaReferencias({ referencias, onVerDetalles, onFilterC
             const catVal  = (ref.categoria || '').trim().toUpperCase();
             const estadoVal = (ref.estado?.trim() || '') === '' ? 'SIN_ESTADO' : (ref.estado || '').trim().toUpperCase();
 
-            const tipoActive    = activeFilters.tipoProducto === tipoVal;
+            const tipoActive    = (activeFilters.tipoProducto || []).includes(tipoVal);
             const catActive     = catVal && activeFilters.categoria === catVal;
-            const estadoActive  = activeFilters.estado?.toUpperCase() === estadoVal;
+            const estadoActive  = (activeFilters.estado || []).includes(estadoVal);
 
             return (
               <tr key={ref._sheetRow ?? idx}>
