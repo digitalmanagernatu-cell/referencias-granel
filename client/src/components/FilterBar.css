@@ -1,3 +1,56 @@
+/* ── Search bar ─────────────────────────────────────────────────────────── */
+.filterbar-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--color-text-secondary);
+  pointer-events: none;
+}
+
+.filter-search-input {
+  width: 100%;
+  padding: 9px 36px 9px 32px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  outline: none;
+  transition: var(--transition);
+}
+
+.filter-search-input::placeholder { color: var(--color-text-secondary); }
+
+.filter-search-input:focus {
+  border-color: var(--color-accent-light);
+  box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.1);
+  background: var(--color-surface);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+.search-clear-btn:hover { color: var(--color-text-primary); background: var(--color-border); }
+
+/* ── Filter bar ─────────────────────────────────────────────────────────── */
 .filterbar {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

@@ -23,6 +23,7 @@ export default function App() {
 
   // Filters
   const [filters, setFilters] = useState({
+    busqueda: '',
     comercial: '',
     tipoProducto: [],
     tipoFragancia: '',
@@ -64,6 +65,11 @@ export default function App() {
   // Sorted descending by date (most recent first); rows without date go last.
   const filtered = useMemo(() => {
     const result = referencias.filter((r) => {
+      if (filters.busqueda) {
+        const q = filters.busqueda.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const nombre = (r.nombreProducto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        if (!nombre.includes(q)) return false;
+      }
       if (filters.comercial &&
         (r.nombreComercial || '').trim().toUpperCase() !== filters.comercial) return false;
       if (filters.tipoProducto.length > 0 &&
@@ -106,7 +112,7 @@ export default function App() {
   }, [refetch]);
 
   const clearFilters = () =>
-    setFilters({ comercial: '', tipoProducto: [], tipoFragancia: '', categoria: '', estado: [], fechaDesde: '', fechaHasta: '' });
+    setFilters({ busqueda: '', comercial: '', tipoProducto: [], tipoFragancia: '', categoria: '', estado: [], fechaDesde: '', fechaHasta: '' });
 
   const handleFilterClick = (key, value) => {
     if (key === 'tipoProducto' || key === 'estado') {
