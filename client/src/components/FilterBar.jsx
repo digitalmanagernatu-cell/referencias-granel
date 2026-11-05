@@ -76,7 +76,7 @@ export default function FilterBar({ filters, setFilters, opciones, onClear, acti
         <input
           type="search"
           className="filter-search-input"
-          placeholder="Buscar por nombre de producto..."
+          placeholder="Buscar por nombre o nº de referencia..."
           value={filters.busqueda}
           onChange={(e) => update('busqueda', e.target.value)}
         />

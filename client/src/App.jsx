@@ -66,9 +66,11 @@ export default function App() {
   const filtered = useMemo(() => {
     const result = referencias.filter((r) => {
       if (filters.busqueda) {
-        const q = filters.busqueda.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-        const nombre = (r.nombreProducto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-        if (!nombre.includes(q)) return false;
+        const normalize = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const q = normalize(filters.busqueda);
+        const matchNombre = normalize(r.nombreProducto).includes(q);
+        const matchNRef   = normalize(r.nRefAsignado).includes(q);
+        if (!matchNombre && !matchNRef) return false;
       }
       if (filters.comercial &&
         (r.nombreComercial || '').trim().toUpperCase() !== filters.comercial) return false;
