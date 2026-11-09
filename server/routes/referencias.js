@@ -143,4 +143,43 @@ router.patch('/:sheetRow/estado', async (req, res, next) => {
   }
 });
 
+// ─── PATCH /api/referencias/:sheetRow/merge-cliente ───────────────────────
+router.patch('/:sheetRow/merge-cliente', async (req, res, next) => {
+  try {
+    const sheetRow = parseInt(req.params.sheetRow, 10);
+    if (isNaN(sheetRow) || sheetRow < 1) {
+      return res.status(400).json({ success: false, error: 'sheetRow inválido' });
+    }
+    const { nuevoCliente, nombreProducto } = req.body;
+    if (!nuevoCliente) {
+      return res.status(400).json({ success: false, error: 'nuevoCliente es obligatorio' });
+    }
+
+    // Read the original row to get its current nombreCliente and notasLaboratorio
+    const referencias = await getReferencias();
+    const original = referencias.find((r) => r._sheetRow === sheetRow);
+    if (!original) {
+      return res.status(404).json({ success: false, error: `No se encontró la referencia en la fila ${sheetRow}` });
+    }
+
+    const clienteOriginal = (original.nombreCliente || 'NATU').trim();
+    const clienteNuevo = nuevoCliente.trim();
+    const combinedCliente = clienteOriginal === clienteNuevo
+      ? clienteOriginal
+      : `${clienteOriginal}/${clienteNuevo}`;
+
+    const now = new Date();
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    const addedNote = `[${dateStr}] Añadido cliente ${clienteNuevo} para "${nombreProducto || 'nueva solicitud'}"`;
+    const existingNotas = (original.notasLaboratorio || '').trim();
+    const combinedNotas = existingNotas ? `${existingNotas}\n${addedNote}` : addedNote;
+
+    await updateMergeDuplicate(sheetRow, combinedCliente, combinedNotas);
+    res.json({ success: true, combinedCliente });
+  } catch (err) {
+    console.error('[PATCH /api/referencias/:sheetRow/merge-cliente]', err.message);
+    next(err);
+  }
+});
+
 module.exports = router;
