@@ -67,7 +67,8 @@
 
 .td-nombre {
   font-weight: 500;
-  max-width: 220px;
+  width: 100%;
+  max-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -124,6 +125,9 @@
 
 .td-cliente {
   font-size: 12px;
+  font-weight: 500;
   color: var(--color-text-secondary);
   white-space: nowrap;
+  width: 90px;
+  min-width: 90px;
 }
