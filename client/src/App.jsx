@@ -110,7 +110,26 @@ export default function App() {
       if (!db) return -1;
       return db - da;
     });
-    return result;
+
+    // Group rows that share the same nRefAsignado (assigned ref number)
+    // Keep the first (newest) row, combine client names
+    const grouped = [];
+    const seenNRef = new Map(); // nRef → index in grouped
+    for (const ref of result) {
+      const nRef = (ref.nRefAsignado || '').trim();
+      if (nRef && seenNRef.has(nRef)) {
+        const idx = seenNRef.get(nRef);
+        const existing = grouped[idx];
+        const clientsSet = new Set();
+        (existing.nombreCliente || 'NATU').split('/').forEach(c => clientsSet.add(c.trim().toUpperCase()));
+        clientsSet.add((ref.nombreCliente || 'NATU').trim().toUpperCase());
+        grouped[idx] = { ...existing, nombreCliente: [...clientsSet].join('/') };
+      } else {
+        if (nRef) seenNRef.set(nRef, grouped.length);
+        grouped.push(ref);
+      }
+    }
+    return grouped;
   }, [referencias, filters]);
 
   // Auto-refresco fijo cada 10 minutos
