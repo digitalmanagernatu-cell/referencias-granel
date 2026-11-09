@@ -10,20 +10,25 @@
 /* ─── Table base ──────────────────────────────────────────────────────────── */
 .tabla {
   width: 100%;
+  min-width: 1240px;
   border-collapse: collapse;
   font-size: 13px;
   table-layout: fixed;
 }
 
-/* Anchos fijos para columnas cortas; Nombre Producto (col 3) toma el espacio restante */
-.tabla th:nth-child(1), .tabla td:nth-child(1) { width: 100px; }
-.tabla th:nth-child(2), .tabla td:nth-child(2) { width: 68px; }
+/*
+  Suma fija: 205+100+100+175+135+115+260 = 1090px
+  Contenedor máx: 1352px → Nombre toma 1352-1090 = 262px
+  Todos los headers caben en 1 línea a estos anchos.
+*/
+.tabla th:nth-child(1), .tabla td:nth-child(1) { width: 205px; } /* Fecha solicitud */
+.tabla th:nth-child(2), .tabla td:nth-child(2) { width: 100px; } /* Nº Ref */
 /* col 3 = Nombre Producto — sin width, toma el espacio sobrante */
-.tabla th:nth-child(4), .tabla td:nth-child(4) { width: 72px; }
-.tabla th:nth-child(5), .tabla td:nth-child(5) { width: 100px; }
-.tabla th:nth-child(6), .tabla td:nth-child(6) { width: 100px; }
-.tabla th:nth-child(7), .tabla td:nth-child(7) { width: 118px; }
-.tabla th:nth-child(8), .tabla td:nth-child(8) { width: 238px; }
+.tabla th:nth-child(4), .tabla td:nth-child(4) { width: 100px; } /* Cliente */
+.tabla th:nth-child(5), .tabla td:nth-child(5) { width: 175px; } /* Tipo producto */
+.tabla th:nth-child(6), .tabla td:nth-child(6) { width: 135px; } /* Categoría */
+.tabla th:nth-child(7), .tabla td:nth-child(7) { width: 115px; } /* Estado */
+.tabla th:nth-child(8), .tabla td:nth-child(8) { width: 260px; } /* Acciones */
 
 .tabla thead {
   background: var(--color-bg);
@@ -41,6 +46,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
   user-select: none;
 }
 
