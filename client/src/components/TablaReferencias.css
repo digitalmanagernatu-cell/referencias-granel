@@ -12,13 +12,18 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
 }
 
-/* Nombre Producto toma todo el espacio disponible; el resto se ajusta al contenido */
-.tabla th:nth-child(3),
-.tabla td:nth-child(3) {
-  width: 99%;
-}
+/* Anchos fijos para columnas cortas; Nombre Producto (col 3) toma el espacio restante */
+.tabla th:nth-child(1), .tabla td:nth-child(1) { width: 100px; }
+.tabla th:nth-child(2), .tabla td:nth-child(2) { width: 68px; }
+/* col 3 = Nombre Producto — sin width, toma el espacio sobrante */
+.tabla th:nth-child(4), .tabla td:nth-child(4) { width: 72px; }
+.tabla th:nth-child(5), .tabla td:nth-child(5) { width: 100px; }
+.tabla th:nth-child(6), .tabla td:nth-child(6) { width: 100px; }
+.tabla th:nth-child(7), .tabla td:nth-child(7) { width: 118px; }
+.tabla th:nth-child(8), .tabla td:nth-child(8) { width: 238px; }
 
 .tabla thead {
   background: var(--color-bg);
@@ -36,7 +41,8 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1px solid var(--color-border);
-  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   user-select: none;
 }
 

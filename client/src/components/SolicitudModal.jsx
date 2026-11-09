@@ -24,8 +24,7 @@ function normalize(s) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9\s]/g, '')
-    .trim();
+    .replace(/[^a-z0-9]/g, '');
 }
 
 function mightBeDuplicate(nameA, nameB) {
@@ -125,7 +124,7 @@ export default function SolicitudModal({ onClose, onSuccess, referencias = [] })
         categoria: form.categoria,
         peticionFechaLanzamiento: form.peticionFechaLanzamiento.trim() || 'NO INDICADO',
         enlaces: enlace,
-        nombreCliente: isExclusiva ? form.nombreCliente.trim() : '',
+        nombreCliente: isExclusiva ? form.nombreCliente.trim() : (form.tipoProducto === 'DIVAIN' ? 'DIVAIN' : ''),
       };
 
       const res = await fetch('/api/referencias', {
@@ -159,6 +158,7 @@ export default function SolicitudModal({ onClose, onSuccess, referencias = [] })
     try {
       const newCliente = isExclusiva
         ? form.nombreCliente.trim()
+        : form.tipoProducto === 'DIVAIN' ? 'DIVAIN'
         : (form.nombreComercial === 'otro' ? form.nombreComercialCustom.trim() : '');
       const sheetRow = duplicateWarning.ref._sheetRow;
 
