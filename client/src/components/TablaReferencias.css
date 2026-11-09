@@ -16,14 +16,14 @@
 }
 
 /* Anchos fijos — la columna Nombre Producto (3ª) toma el espacio restante */
-.tabla th:nth-child(1) { width: 115px; } /* Fecha solicitud */
-.tabla th:nth-child(2) { width: 55px;  } /* Nº Ref */
+.tabla th:nth-child(1) { width: 110px; } /* Fecha solicitud */
+.tabla th:nth-child(2) { width: 50px;  } /* Nº Ref */
                                            /* Nombre Producto → auto */
-.tabla th:nth-child(4) { width: 82px;  } /* Cliente */
-.tabla th:nth-child(5) { width: 105px; } /* Tipo Producto */
-.tabla th:nth-child(6) { width: 105px; } /* Categoría */
-.tabla th:nth-child(7) { width: 115px; } /* Estado */
-.tabla th:nth-child(8) { width: 158px; } /* Acciones */
+.tabla th:nth-child(4) { width: 75px;  } /* Cliente */
+.tabla th:nth-child(5) { width: 95px;  } /* Tipo Producto */
+.tabla th:nth-child(6) { width: 100px; } /* Categoría */
+.tabla th:nth-child(7) { width: 108px; } /* Estado */
+.tabla th:nth-child(8) { width: 210px; } /* Acciones */
 
 .tabla thead {
   background: var(--color-bg);
