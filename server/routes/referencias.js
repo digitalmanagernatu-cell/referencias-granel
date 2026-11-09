@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getReferencias, addReferencia, updateEnlace, updateNRef, updateEstado } = require('../services/sharepointService');
+const { getReferencias, addReferencia, updateEnlace, updateNRef, updateEstado, updateMergeDuplicate } = require('../services/sharepointService');
 const { sendNuevaReferencia, sendEnlaceActualizado, sendNRefAsignado, sendCambioEstado } = require('../services/emailService');
 
 const ESTADOS_VALIDOS = ['APROBADO', 'DESCARTADO', 'EVALUANDO', 'PENDIENTE', 'RECHAZADO', 'TESTANDO'];

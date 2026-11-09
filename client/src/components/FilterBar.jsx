@@ -24,11 +24,9 @@ function MultiSelect({ id, options, value, onChange }) {
   };
 
   const summaryText =
-    value.length === 0
-      ? 'Todos'
-      : value.length === 1
-      ? displayLabel(value[0])
-      : `${value.length} seleccionados`;
+    value.length === 0 ? 'Todos'
+    : value.length === 1 ? displayLabel(value[0])
+    : `${value.length} seleccionados`;
 
   return (
     <div className="multiselect-wrapper" ref={ref}>
@@ -49,11 +47,7 @@ function MultiSelect({ id, options, value, onChange }) {
         <div className="multiselect-dropdown" role="listbox" aria-multiselectable="true">
           {options.map((opt) => (
             <label key={opt} className={`multiselect-option${value.includes(opt) ? ' selected' : ''}`}>
-              <input
-                type="checkbox"
-                checked={value.includes(opt)}
-                onChange={() => toggle(opt)}
-              />
+              <input type="checkbox" checked={value.includes(opt)} onChange={() => toggle(opt)} />
               {displayLabel(opt)}
             </label>
           ))}
@@ -68,26 +62,24 @@ export default function FilterBar({ filters, setFilters, opciones, onClear, acti
 
   return (
     <div className="filterbar">
-      {/* Buscador por nombre */}
-      <div className="filterbar-search">
-        <svg className="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <input
-          type="search"
-          className="filter-search-input"
-          placeholder="Buscar por nombre o nº de referencia..."
-          value={filters.busqueda}
-          onChange={(e) => update('busqueda', e.target.value)}
-        />
-        {filters.busqueda && (
-          <button className="search-clear-btn" onClick={() => update('busqueda', '')} aria-label="Limpiar búsqueda">×</button>
-        )}
-      </div>
-
-      <div className="filterbar-grid">
-        {/* Solicitante */}
-        <div className="filter-group">
+      {/* Row 1: search + solicitante */}
+      <div className="filterbar-top">
+        <div className="filterbar-search">
+          <svg className="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="search"
+            className="filter-search-input"
+            placeholder="Buscar por nombre o nº de referencia..."
+            value={filters.busqueda}
+            onChange={(e) => update('busqueda', e.target.value)}
+          />
+          {filters.busqueda && (
+            <button className="search-clear-btn" onClick={() => update('busqueda', '')} aria-label="Limpiar búsqueda">×</button>
+          )}
+        </div>
+        <div className="filterbar-solicitante">
           <label className="filter-label" htmlFor="f-comercial">Solicitante</label>
           <select
             id="f-comercial"
@@ -101,7 +93,10 @@ export default function FilterBar({ filters, setFilters, opciones, onClear, acti
             ))}
           </select>
         </div>
+      </div>
 
+      {/* Row 2: grid filters */}
+      <div className="filterbar-grid">
         {/* Tipo Producto — multi-select */}
         <div className="filter-group">
           <label className="filter-label" htmlFor="f-tipo">Tipo de Producto</label>
@@ -156,9 +151,25 @@ export default function FilterBar({ filters, setFilters, opciones, onClear, acti
           />
         </div>
 
+        {/* Cliente */}
+        <div className="filter-group">
+          <label className="filter-label" htmlFor="f-cliente">Cliente</label>
+          <select
+            id="f-cliente"
+            className="filter-control"
+            value={filters.cliente}
+            onChange={(e) => update('cliente', e.target.value)}
+          >
+            <option value="">Todos</option>
+            {opciones.clientes.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Fecha desde */}
         <div className="filter-group">
-          <label className="filter-label" htmlFor="f-desde">Fecha solicitud desde</label>
+          <label className="filter-label" htmlFor="f-desde">Fecha desde</label>
           <input
             id="f-desde"
             type="date"

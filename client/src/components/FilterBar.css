@@ -1,9 +1,27 @@
 /* ── Search bar ─────────────────────────────────────────────────────────── */
+.filterbar-top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.filterbar-top .filterbar-search {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.filterbar-solicitante {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 150px;
+}
+
 .filterbar-search {
   position: relative;
   display: flex;
   align-items: center;
-  margin-bottom: 14px;
 }
 
 .search-icon {
@@ -236,6 +254,8 @@
 @media (max-width: 640px) {
   .filterbar-grid { grid-template-columns: 1fr 1fr; }
   .filterbar { padding: 14px 16px; }
+  .filterbar-top { flex-direction: column; }
+  .filterbar-solicitante { min-width: unset; }
 }
 
 @media (max-width: 400px) {

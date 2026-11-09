@@ -24,6 +24,7 @@ export default function App() {
   // Filters
   const [filters, setFilters] = useState({
     busqueda: '',
+    cliente: '',
     comercial: '',
     tipoProducto: [],
     tipoFragancia: '',
@@ -58,6 +59,7 @@ export default function App() {
       ),
       tiposFragancia: normalizeOptions(referencias.map((r) => r.tipoFragancia)),
       categorias: normalizeOptions(referencias.map((r) => r.categoria)),
+      clientes: normalizeOptions(referencias.map((r) => r.nombreCliente || 'NATU')),
     };
   }, [referencias]);
 
@@ -71,6 +73,10 @@ export default function App() {
         const matchNombre = normalize(r.nombreProducto).includes(q);
         const matchNRef   = normalize(r.nRefAsignado).includes(q);
         if (!matchNombre && !matchNRef) return false;
+      }
+      if (filters.cliente) {
+        const clienteRef = (r.nombreCliente || 'NATU').trim().toUpperCase();
+        if (clienteRef !== filters.cliente) return false;
       }
       if (filters.comercial &&
         (r.nombreComercial || '').trim().toUpperCase() !== filters.comercial) return false;
@@ -114,7 +120,7 @@ export default function App() {
   }, [refetch]);
 
   const clearFilters = () =>
-    setFilters({ busqueda: '', comercial: '', tipoProducto: [], tipoFragancia: '', categoria: '', estado: [], fechaDesde: '', fechaHasta: '' });
+    setFilters({ busqueda: '', cliente: '', comercial: '', tipoProducto: [], tipoFragancia: '', categoria: '', estado: [], fechaDesde: '', fechaHasta: '' });
 
   const handleFilterClick = (key, value) => {
     if (key === 'tipoProducto' || key === 'estado') {
@@ -189,6 +195,7 @@ export default function App() {
 
       {solicitudOpen && (
         <SolicitudModal
+          referencias={referencias}
           onClose={() => setSolicitudOpen(false)}
           onSuccess={() => {
             setSolicitudOpen(false);

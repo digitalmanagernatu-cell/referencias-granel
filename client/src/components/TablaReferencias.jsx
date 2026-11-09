@@ -54,6 +54,7 @@ export default function TablaReferencias({ referencias, onVerDetalles, onFilterC
             <th>Fecha solicitud</th>
             <th>Nº Ref.</th>
             <th>Nombre producto</th>
+            <th>Cliente</th>
             <th>Tipo producto</th>
             <th>Categoría</th>
             <th>Estado</th>
@@ -92,6 +93,7 @@ export default function TablaReferencias({ referencias, onVerDetalles, onFilterC
                 <td className="td-nombre" title={ref.nombreProducto}>
                   {ref.nombreProducto || '—'}
                 </td>
+                <td className="td-cliente">{ref.nombreCliente || 'NATU'}</td>
                 <td>
                   <span
                     className={`${getTipoBadgeClass(ref.tipoProducto)} badge-filter${tipoActive ? ' badge-filter-active' : ''}`}

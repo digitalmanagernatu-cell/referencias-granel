@@ -19,20 +19,51 @@ const INITIAL_FORM = {
   nombreCliente: '',
 };
 
-export default function SolicitudModal({ onClose, onSuccess }) {
+function normalize(s) {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim();
+}
+
+function mightBeDuplicate(nameA, nameB) {
+  const a = normalize(nameA);
+  const b = normalize(nameB);
+  if (!a || !b || a.length < 5 || b.length < 5) return false;
+  const shorter = a.length <= b.length ? a : b;
+  const longer  = a.length <= b.length ? b : a;
+  return longer.includes(shorter) && shorter.length >= 5;
+}
+
+function sameUrl(urlA, urlB) {
+  if (!urlA || !urlB) return false;
+  try {
+    return new URL(urlA).pathname.toLowerCase() === new URL(urlB).pathname.toLowerCase();
+  } catch { return false; }
+}
+
+export default function SolicitudModal({ onClose, onSuccess, referencias = [] }) {
   const [form, setForm] = useState(INITIAL_FORM);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
+  const [skipDuplicateCheck, setSkipDuplicateCheck] = useState(false);
 
   const isOtroComercial = form.nombreComercial === 'otro';
   const isExclusiva = form.tipoProducto === 'EXCLUSIVA';
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
+
+  useEffect(() => {
+    setDuplicateWarning(null);
+    setSkipDuplicateCheck(false);
+  }, [form.nombreProducto, form.enlaces]);
 
   const update = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -57,23 +88,43 @@ export default function SolicitudModal({ onClose, onSuccess }) {
     return Object.keys(newErrors).length === 0;
   };
 
+  function findSimilar(nombre, enlace) {
+    for (const ref of referencias) {
+      if (mightBeDuplicate(nombre, ref.nombreProducto)) {
+        return { ref, reason: `nombre similar a "${ref.nombreProducto}"` };
+      }
+      if (enlace && sameUrl(enlace, ref.enlaces)) {
+        return { ref, reason: 'mismo enlace de Fragrantica' };
+      }
+    }
+    return null;
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
+    const nombre = form.nombreProducto.trim();
+    const enlace = form.enlaces.trim();
+
+    if (!skipDuplicateCheck) {
+      const similar = findSimilar(nombre, enlace);
+      if (similar) {
+        setDuplicateWarning(similar);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const payload = {
-        nombreComercial: isOtroComercial
-          ? form.nombreComercialCustom.trim()
-          : form.nombreComercial,
-        nombreProducto: form.nombreProducto.trim(),
+        nombreComercial: isOtroComercial ? form.nombreComercialCustom.trim() : form.nombreComercial,
+        nombreProducto: nombre,
         tipoProducto: form.tipoProducto,
         tipoFragancia: form.tipoFragancia,
         categoria: form.categoria,
-        // Empty → send 'NO INDICADO' so the Excel cell is never blank
         peticionFechaLanzamiento: form.peticionFechaLanzamiento.trim() || 'NO INDICADO',
-        enlaces: form.enlaces.trim(),
+        enlaces: enlace,
         nombreCliente: isExclusiva ? form.nombreCliente.trim() : '',
       };
 
@@ -87,7 +138,6 @@ export default function SolicitudModal({ onClose, onSuccess }) {
 
       if (!res.ok) {
         if (res.status === 409) {
-          // Duplicate — surface as a field-level error so user sees it in context
           setErrors({ nombreProducto: json.error || 'Esta referencia ya está solicitada' });
           return;
         }
@@ -103,6 +153,43 @@ export default function SolicitudModal({ onClose, onSuccess }) {
     }
   };
 
+  const handleMerge = async () => {
+    if (!duplicateWarning) return;
+    setSubmitting(true);
+    try {
+      const newCliente = isExclusiva
+        ? form.nombreCliente.trim()
+        : (form.nombreComercial === 'otro' ? form.nombreComercialCustom.trim() : '');
+      const sheetRow = duplicateWarning.ref._sheetRow;
+
+      const res = await fetch(`/api/referencias/${sheetRow}/merge-cliente`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nuevoCliente: newCliente || 'NATU',
+          nombreProducto: form.nombreProducto.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || `Error ${res.status}`);
+
+      toast.success('Solicitud registrada como cliente adicional en la referencia existente');
+      onSuccess();
+    } catch (err) {
+      toast.error(`Error al combinar: ${err.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDifferent = () => {
+    setDuplicateWarning(null);
+    setSkipDuplicateCheck(true);
+    setTimeout(() => {
+      document.getElementById('solicitud-submit-btn')?.click();
+    }, 50);
+  };
+
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal modal-solicitud" role="dialog" aria-modal="true" aria-labelledby="solicitud-title">
@@ -113,8 +200,30 @@ export default function SolicitudModal({ onClose, onSuccess }) {
 
         <form onSubmit={handleSubmit} noValidate>
           <div className="modal-body">
-            <div className="solicitud-grid">
+            {duplicateWarning && (
+              <div className="duplicate-warning">
+                <div className="duplicate-warning-icon">⚠️</div>
+                <div className="duplicate-warning-body">
+                  <p className="duplicate-warning-title">Posible referencia duplicada</p>
+                  <p className="duplicate-warning-text">
+                    Ya existe una referencia con {duplicateWarning.reason}:{' '}
+                    <strong>{duplicateWarning.ref.nombreProducto}</strong>
+                    {duplicateWarning.ref.nombreCliente && ` (cliente: ${duplicateWarning.ref.nombreCliente})`}.
+                  </p>
+                  <p className="duplicate-warning-text">¿Es la misma fragancia con un cliente diferente, o es una fragancia distinta?</p>
+                  <div className="duplicate-warning-actions">
+                    <button type="button" className="btn btn-warning" onClick={handleMerge} disabled={submitting}>
+                      Es la misma — añadir como cliente adicional
+                    </button>
+                    <button type="button" className="btn btn-outline" onClick={handleDifferent} disabled={submitting}>
+                      No, es diferente — continuar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
+            <div className="solicitud-grid">
               {/* Nombre Comercial */}
               <div className="form-group">
                 <label className="form-label" htmlFor="s-comercial">
@@ -134,7 +243,6 @@ export default function SolicitudModal({ onClose, onSuccess }) {
                 {errors.nombreComercial && <span className="form-error">{errors.nombreComercial}</span>}
               </div>
 
-              {/* Campo libre para "otro" comercial */}
               {isOtroComercial && (
                 <div className="form-group">
                   <label className="form-label" htmlFor="s-comercial-custom">
@@ -188,7 +296,7 @@ export default function SolicitudModal({ onClose, onSuccess }) {
                 {errors.tipoProducto && <span className="form-error">{errors.tipoProducto}</span>}
               </div>
 
-              {/* Tipo de fragancia (género) */}
+              {/* Tipo de fragancia */}
               <div className="form-group">
                 <label className="form-label" htmlFor="s-tipo-fragancia">
                   Tipo fragancia <span className="required">*</span>
@@ -257,7 +365,6 @@ export default function SolicitudModal({ onClose, onSuccess }) {
                 {errors.enlaces && <span className="form-error">{errors.enlaces}</span>}
               </div>
 
-              {/* Nombre del cliente (solo si Exclusiva) */}
               {isExclusiva && (
                 <div className="form-group form-group-full solicitud-conditional">
                   <div className="conditional-header">
@@ -286,24 +393,17 @@ export default function SolicitudModal({ onClose, onSuccess }) {
           </div>
 
           <div className="modal-footer">
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={onClose}
-              disabled={submitting}
-            >
+            <button type="button" className="btn btn-outline" onClick={onClose} disabled={submitting}>
               Cancelar
             </button>
             <button
+              id="solicitud-submit-btn"
               type="submit"
               className="btn btn-primary"
               disabled={submitting}
             >
               {submitting ? (
-                <>
-                  <span className="btn-spinner" />
-                  Guardando...
-                </>
+                <><span className="btn-spinner" />Guardando...</>
               ) : (
                 <>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -320,7 +420,6 @@ export default function SolicitudModal({ onClose, onSuccess }) {
   );
 }
 
-// ─── Helper ─────────────────────────────────────────────────────────────────
 function isValidUrl(str) {
   try {
     const url = new URL(str);

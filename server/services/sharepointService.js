@@ -990,4 +990,91 @@ async function diagnose() {
   return result;
 }
 
-module.exports = { getReferencias, addReferencia, updateEnlace, updateNRef, updateEstado, diagnose, getTokenPermissions };
+/**
+ * Updates nombreCliente (col H) and appends a note to notasLaboratorio (col R)
+ * when merging a duplicate reference into the original row.
+ * @param {number} sheetRow        1-based Excel row number
+ * @param {string} combinedCliente Combined client string (e.g. "NATU/DIVAIN")
+ * @param {string} nota            Text to append to notasLaboratorio
+ */
+async function updateMergeDuplicate(sheetRow, combinedCliente, nota) {
+  const clienteIdx = COLUMNS.indexOf('nombreCliente'); // 7 → col H
+  const notasIdx   = COLUMNS.indexOf('notasLaboratorio'); // 17 → col R
+  const clienteCol = String.fromCharCode(65 + clienteIdx);
+  const notasCol   = String.fromCharCode(65 + notasIdx);
+
+  try {
+    const token = await getAccessToken();
+    const workbookBase = await resolveWorkbookBase(token);
+    const base = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const sheetBase = `${workbookBase}/worksheets('${encodeURIComponent(SHEET_NAME)}')`;
+
+    let sessionId = null;
+    try {
+      const res = await axios.post(
+        graphUrl(`${workbookBase}/createSession`),
+        { persistChanges: true },
+        { headers: base }
+      );
+      sessionId = res.data.id;
+    } catch (err) {
+      const status = err.response && err.response.status;
+      if (status === 423 || status === 403) {
+        console.warn('[updateMergeDuplicate] createSession failed (%d) – sessionless', status);
+      } else {
+        throw err;
+      }
+    }
+
+    const reqHeaders = sessionId ? { ...base, 'workbook-session-id': sessionId } : base;
+
+    async function closeSession() {
+      if (!sessionId) return;
+      try { await axios.post(graphUrl(`${workbookBase}/closeSession`), {}, { headers: reqHeaders }); }
+      catch (_) { /* best-effort */ }
+    }
+
+    try {
+      await withRetry(
+        () => axios.patch(
+          graphUrl(`${sheetBase}/range(address='${clienteCol}${sheetRow}')`),
+          { values: [[combinedCliente]] },
+          { headers: reqHeaders }
+        ),
+        'updateMerge-cliente', 4, 500
+      );
+      await withRetry(
+        () => axios.patch(
+          graphUrl(`${sheetBase}/range(address='${notasCol}${sheetRow}')`),
+          { values: [[nota]] },
+          { headers: reqHeaders }
+        ),
+        'updateMerge-notas', 4, 500
+      );
+      await closeSession();
+      return;
+    } catch (err) {
+      await closeSession();
+      throw err;
+    }
+  } catch (workbookErr) {
+    const status = workbookErr.response && workbookErr.response.status;
+    if (status !== 403 && status !== 401) throw workbookErr;
+    console.warn('[updateMergeDuplicate] Workbook API bloqueada (%d) – fallback ExcelJS', status);
+  }
+
+  // ── Fallback: binary download → ExcelJS cell edit → re-upload ────────────
+  const buffer = await downloadExcel();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const ws = wb.getWorksheet(SHEET_NAME);
+  if (!ws) throw new Error(`Hoja "${SHEET_NAME}" no encontrada`);
+
+  ws.getCell(sheetRow, clienteIdx + 1).value = combinedCliente || null;
+  ws.getCell(sheetRow, notasIdx + 1).value = nota || null;
+
+  const newBuffer = await wb.xlsx.writeBuffer();
+  await uploadExcel(Buffer.from(newBuffer));
+}
+
+module.exports = { getReferencias, addReferencia, updateEnlace, updateNRef, updateEstado, updateMergeDuplicate, diagnose, getTokenPermissions };
